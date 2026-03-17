@@ -106,6 +106,83 @@ void WriteToSet(T* begin, T* end, UINT32 r)
   *found_reg = r;
 }
 
+void WriteEvent(unsigned char type, uint64_t addr, uint64_t size, uint32_t tid, ADDRINT ip) {
+    trace_instr_format_t ev;
+    memset(&ev, 0, sizeof(ev));
+
+    ev.ip = ip;                     // 可选：记录发生事件的指令地址
+    ev.is_malloc = type;
+
+    // 约定：使用 source_memory[0] 存储地址，destination_memory[0] 存储大小
+    // 对于 free，size 可忽略（设为 0）
+    ev.source_memory[0] = addr;     // 地址
+    ev.destination_memory[0] = size; // 大小
+
+    // 如果需要线程ID，可放入 source_memory[1] 或某个寄存器数组
+    // ev.source_memory[1] = tid;
+
+    outfile.write(reinterpret_cast<const char*>(&ev), sizeof(ev));
+}
+
+thread_local uint64_t tls_malloc_size = 0;
+
+void MallocEntry(THREADID tid, uint64_t size) {
+    tls_malloc_size = size;
+}
+
+void MallocExit(THREADID tid, uint64_t ret_val, ADDRINT ip) {
+    if (ret_val != 0) {
+        WriteEvent(INSTR_MALLOC, ret_val, tls_malloc_size, tid, ip);
+    }
+}
+
+void FreeEntry(THREADID tid, uint64_t ptr, ADDRINT ip) {
+    if (ptr != 0) {
+        WriteEvent(INSTR_FREE, ptr, 0, tid, ip);  // free 大小设为0
+    }
+}
+
+VOID ImageLoad(IMG img, VOID* v)
+{
+    // ===== hook malloc =====
+    RTN mallocRtn = RTN_FindByName(img, "malloc");
+    if (RTN_Valid(mallocRtn)) {
+        RTN_Open(mallocRtn);
+
+        // malloc(size)
+        RTN_InsertCall(mallocRtn, IPOINT_BEFORE, (AFUNPTR)MallocEntry,
+                       IARG_THREAD_ID,
+                       IARG_FUNCARG_ENTRYPOINT_VALUE, 0, // size
+                       IARG_END);
+
+        // 返回值（分配地址）
+        RTN_InsertCall(mallocRtn, IPOINT_AFTER, (AFUNPTR)MallocExit,
+                       IARG_THREAD_ID,
+                       IARG_FUNCRET_EXITPOINT_VALUE,     // ret ptr
+                       IARG_INST_PTR,                   // call site IP（可选）
+                       IARG_END);
+
+        RTN_Close(mallocRtn);
+    }
+
+    // ===== hook free =====
+    RTN freeRtn = RTN_FindByName(img, "free");
+    if (RTN_Valid(freeRtn)) {
+        RTN_Open(freeRtn);
+
+        // free(ptr)
+        RTN_InsertCall(freeRtn, IPOINT_BEFORE, (AFUNPTR)FreeEntry,
+                       IARG_THREAD_ID,
+                       IARG_FUNCARG_ENTRYPOINT_VALUE, 0, // ptr
+                       IARG_INST_PTR,
+                       IARG_END);
+
+        RTN_Close(freeRtn);
+    }
+    #include <ctime>
+}
+
+
 /* ===================================================================== */
 // Instrumentation callbacks
 /* ===================================================================== */
@@ -185,6 +262,8 @@ int main(int argc, char* argv[])
 
   // Register function to be called to instrument instructions
   INS_AddInstrumentFunction(Instruction, 0);
+
+  IMG_AddInstrumentFunction(ImageLoad, 0);
 
   // Register function to be called when the application exits
   PIN_AddFiniFunction(Fini, 0);

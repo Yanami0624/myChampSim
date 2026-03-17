@@ -114,6 +114,16 @@ void O3_CPU::initialize_instruction()
   while (current_time >= fetch_resume_time && instrs_to_read_this_cycle.has_remaining() && !stop_fetch && !std::empty(input_queue)) {
     instrs_to_read_this_cycle.consume();
 
+    // 过滤 malloc/free
+    auto& instr = input_queue.front();
+    if (instr.is_malloc) {
+        // 可以顺便做 object 管理（后面会用）
+        // handle_malloc_event(instr);
+
+        input_queue.pop_front();  // 丢掉，不进流水线
+        continue;
+    }
+
     stop_fetch = do_init_instruction(input_queue.front());
 
     // Add to IFETCH_BUFFER

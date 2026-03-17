@@ -44,9 +44,17 @@ struct input_instr {
   unsigned char destination_registers[NUM_INSTR_DESTINATIONS]; // output registers
   unsigned char source_registers[NUM_INSTR_SOURCES];           // input registers
 
-  unsigned long long destination_memory[NUM_INSTR_DESTINATIONS]; // output memory
-  unsigned long long source_memory[NUM_INSTR_SOURCES];           // input memory
+  unsigned long long destination_memory[NUM_INSTR_DESTINATIONS]; // output memory | destination_memory[0]--malloc size
+  unsigned long long source_memory[NUM_INSTR_SOURCES];           // input memory | source_memory[0]--malloc addr
+
+  unsigned char is_malloc; // 0 none, 1 malloc, 2 free
+    // 约定：使用 source_memory[0] 存储地址，destination_memory[0] 存储大小
+
 };
+
+const unsigned char INSTR_NORMAL = 0;
+const unsigned char INSTR_MALLOC = 1;
+const unsigned char INSTR_FREE   = 2;
 
 struct cloudsuite_instr {
   // instruction pointer or PC (Program Counter)
