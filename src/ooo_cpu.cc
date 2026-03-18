@@ -105,6 +105,64 @@ void O3_CPU::end_phase(unsigned finished_cpu)
   }
 }
 
+uint64_t global_object_id = 0;
+
+void O3_CPU::handle_malloc_event(const ooo_model_instr& instr)
+{
+    if (instr.source_memory.empty() || instr.destination_memory.empty())
+        return;
+
+    uint64_t addr = instr.source_memory[0].to<uint64_t>();
+    uint64_t size = instr.destination_memory[0].to<uint64_t>();
+
+    ObjectInfo obj;
+    obj.object_id = global_object_id++;
+    obj.base_addr = addr;
+    obj.size = size;
+    obj.alloc_time = current_time;
+    obj.alive = true;
+
+    history_table[obj.object_id] = obj;
+    live_table[addr] = &history_table[obj.object_id];
+}
+
+void O3_CPU::handle_free_event(const ooo_model_instr& instr)
+{
+    if (instr.source_memory.empty())
+        return;
+
+    uint64_t addr = instr.source_memory[0].to<uint64_t>();
+
+    auto it = live_table.find(addr);
+    if (it == live_table.end())
+        return;
+
+    ObjectInfo* obj = it->second;
+    obj->alive = false;
+    obj->free_time = current_time;
+    
+    live_table.erase(it);
+}
+
+// TODO optimize
+ObjectInfo* find_object(uint64_t addr)
+{
+    auto it = live_table.upper_bound(addr);
+    
+    if (it == live_table.begin()) {
+        return nullptr;
+    }
+    
+    --it;
+    
+    auto& [base, obj] = *it;
+    if (addr < base + obj->size) {
+        return obj;
+    }
+    
+    return nullptr;
+}
+
 void O3_CPU::initialize_instruction()
 {
   champsim::bandwidth instrs_to_read_this_cycle{
@@ -117,8 +175,16 @@ void O3_CPU::initialize_instruction()
     // 过滤 malloc/free
     auto& instr = input_queue.front();
     if (instr.is_malloc) {
-        // 可以顺便做 object 管理（后面会用）
-        // handle_malloc_event(instr);
+        switch (instr.is_malloc) {
+          case INSTR_MALLOC:
+            handle_malloc_event(instr);
+            break;
+          case INSTR_FREE:
+            handle_free_event(instr);
+            break;
+          default:
+            ;
+        }
 
         input_queue.pop_front();  // 丢掉，不进流水线
         continue;

@@ -32,6 +32,12 @@
 #include "util/bits.h"
 #include "util/span.h"
 
+#include "ooo_cpu.h"
+extern struct ObjectInfo;
+extern std::map<uint64_t, ObjectInfo*> live_table; // 当前活跃对象（地址 → object）
+extern std::unordered_map<uint64_t, ObjectInfo> history_table; // 所有对象（object_id → object）
+extern ObjectInfo* find_object(uint64_t addr);
+
 CACHE::CACHE(CACHE&& other)
     : operable(other),
 
@@ -249,6 +255,14 @@ bool CACHE::handle_fill(const mshr_type& fill_mshr)
 
 bool CACHE::try_hit(const tag_lookup_type& handle_pkt)
 {
+  uint64_t addr = handle_pkt.address.to<uint64_t>();
+  auto* obj = find_object(addr);
+  if (obj) {
+    if (NAME == "cpu0_L1D") obj->access_count_l1++;
+    if (NAME == "cpu0_L2C") obj->access_count_l2++;
+    if (NAME == "LLC")      obj->access_count_llc++;
+  }
+
   cpu = handle_pkt.cpu;
 
   // access cache

@@ -115,8 +115,8 @@ void WriteEvent(unsigned char type, uint64_t addr, uint64_t size, uint32_t tid, 
 
     // 约定：使用 source_memory[0] 存储地址，destination_memory[0] 存储大小
     // 对于 free，size 可忽略（设为 0）
-    ev.source_memory[0] = addr;     // 地址
-    ev.destination_memory[0] = size; // 大小
+    ev.source_memory[0] = size;     // 地址
+    ev.destination_memory[0] = addr; // 大小
 
     // 如果需要线程ID，可放入 source_memory[1] 或某个寄存器数组
     // ev.source_memory[1] = tid;

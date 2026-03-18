@@ -45,6 +45,8 @@
 #include "util/lru_table.h"
 #include "util/to_underlying.h"
 
+struct ObjectInfo;
+
 class CACHE;
 class CacheBus
 {
@@ -177,6 +179,9 @@ public:
   void do_finish_store(const LSQ_ENTRY& sq_entry);
   bool do_complete_store(const LSQ_ENTRY& sq_entry);
   bool execute_load(const LSQ_ENTRY& lq_entry);
+
+  void handle_malloc_event(const ooo_model_instr& instr);
+  void handle_free_event(const ooo_model_instr& instr);
 
   [[nodiscard]] auto roi_instr() const { return roi_stats.instrs(); }
   [[nodiscard]] auto roi_cycle() const { return roi_stats.cycles(); }
@@ -373,5 +378,36 @@ std::pair<champsim::address, bool> O3_CPU::btb_module_model<Ts...>::impl_btb_pre
 #undef SET_ASIDE_CHAMPSIM_MODULE
 #define CHAMPSIM_MODULE
 #endif
+
+#include <unordered_map>
+
+struct ObjectInfo {
+    uint64_t object_id;
+
+    uint64_t base_addr;
+    uint64_t size;
+
+    champsim::chrono::clock::time_point alloc_time;
+    champsim::chrono::clock::time_point free_time;
+    bool alive = true;
+
+    // 后面论文要用的统计
+    uint64_t access_count_l1 = 0;
+    uint64_t hit_count_l1 = 0;
+    uint64_t miss_count_l1 = 0;
+
+    uint64_t access_count_l2 = 0;
+    uint64_t hit_count_l2 = 0;
+    uint64_t miss_count_l2 = 0;
+
+    uint64_t access_count_llc = 0;
+    uint64_t hit_count_llc = 0;
+    uint64_t miss_count_llc = 0;
+};
+
+std::map<uint64_t, ObjectInfo*> live_table; // 当前活跃对象（地址 → object）
+std::unordered_map<uint64_t, ObjectInfo> history_table; // 所有对象（object_id → object）
+
+ObjectInfo* find_object(uint64_t addr);
 
 #endif

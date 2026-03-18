@@ -30,9 +30,9 @@ export PIN_ROOT
 echo "=== [0/3] Compiling champsim_tracer ==="
 pushd "$CHAMPSIM_TRACER_DIR" > /dev/null
 make clean
-make obj-intel64/champsim_tracer.so
+make -j$(nproc)
 if [ $? -ne 0 ]; then
-    echo "❌ champsim_tracer compile failed"
+    echo "❌ compile failed"
     exit 1
 fi
 popd > /dev/null

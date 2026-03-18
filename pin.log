@@ -1,3 +1,3 @@
 Pin: pin-3.22-98547-7a303a835
 Copyright 2002-2020 Intel Corporation.
-E:  Unable to load /home/yanami0624/ChampSim/tracer/pin/obj-intel64/champsim_tracer.so: dlopen failed: unknown reloc type 16 @ 0x764af950e6d0 (382)
+E:  Unable to load /home/yanami0624/ChampSim/tracer/pin/obj-intel64/champsim_tracer.so: dlopen failed: unknown reloc type 16 @ 0x70435ac576d0 (382)

@@ -103,7 +103,7 @@ struct ooo_model_instr : champsim::program_ordered<ooo_model_instr> {
   bool branch_prediction = false;
   bool branch_mispredicted = false; // A branch can be mispredicted even if the direction prediction is correct when the predicted target is not correct
 
-  bool is_malloc = false;
+  unsigned char is_malloc = false;
 
   std::array<uint8_t, 2> asid = {std::numeric_limits<uint8_t>::max(), std::numeric_limits<uint8_t>::max()};
 
