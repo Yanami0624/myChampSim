@@ -32,3 +32,5 @@ compile_commands.json
 **/.DS_Store
 
 traces/
+output.txt
+mytests/test.s
