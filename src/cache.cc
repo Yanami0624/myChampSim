@@ -22,6 +22,7 @@
 #include <iomanip>
 #include <numeric>
 #include <fmt/core.h>
+#include <iostream>
 
 #include "bandwidth.h"
 #include "champsim.h"
@@ -33,7 +34,6 @@
 #include "util/span.h"
 
 #include "ooo_cpu.h"
-extern struct ObjectInfo;
 extern std::map<uint64_t, ObjectInfo*> live_table; // 当前活跃对象（地址 → object）
 extern std::unordered_map<uint64_t, ObjectInfo> history_table; // 所有对象（object_id → object）
 extern ObjectInfo* find_object(uint64_t addr);
@@ -253,11 +253,25 @@ bool CACHE::handle_fill(const mshr_type& fill_mshr)
   return true;
 }
 
+
+
+void match(std::string name, int& count) {
+  static std::string L1[] = {"cpu0_L1D", "cpu0_L1I"};
+  static std::string L2[] = {"cpu0_L2C"};
+  static std::string LLC[] = {"LLC"};
+  
+}
+
 bool CACHE::try_hit(const tag_lookup_type& handle_pkt)
 {
+  // TODO 这里的addr可能不是 object 地址而是 block 地址
+  static int cnt = 0;
+  // if(cnt++ % 10000 == 0) std::cout << NAME << ' ';
   uint64_t addr = handle_pkt.address.to<uint64_t>();
   auto* obj = find_object(addr);
   if (obj) {
+    // obj->access_count_l1++;
+    // std::cout << NAME << ' ';
     if (NAME == "cpu0_L1D") obj->access_count_l1++;
     if (NAME == "cpu0_L2C") obj->access_count_l2++;
     if (NAME == "LLC")      obj->access_count_llc++;
@@ -288,6 +302,14 @@ bool CACHE::try_hit(const tag_lookup_type& handle_pkt)
                                 hit);
 
   if (hit) {
+    uint64_t addr = handle_pkt.address.to<uint64_t>();
+    auto* obj = find_object(addr);
+    if (obj) {
+      if (NAME == "cpu0_L1D") obj->hit_count_l1++;
+      if (NAME == "cpu0_L2C") obj->hit_count_l2++;
+      if (NAME == "LLC")      obj->hit_count_llc++;
+    }
+
     sim_stats.hits.increment(std::pair{handle_pkt.type, handle_pkt.cpu});
 
     response_type response{handle_pkt.address, handle_pkt.v_address, way->data, metadata_thru, handle_pkt.instr_depend_on_me};
@@ -356,6 +378,14 @@ bool CACHE::handle_miss(const tag_lookup_type& handle_pkt)
       if (mshr_entry->prefetch_from_this) {
         ++sim_stats.pf_useful;
       }
+    }
+
+    uint64_t addr = handle_pkt.address.to<uint64_t>();
+    auto* obj = find_object(addr);
+    if (obj) {
+      if (NAME == "cpu0_L1D") obj->miss_count_l1++;
+      if (NAME == "cpu0_L2C") obj->miss_count_l2++;
+      if (NAME == "LLC")      obj->miss_count_llc;
     }
 
     // COLLECT STATS

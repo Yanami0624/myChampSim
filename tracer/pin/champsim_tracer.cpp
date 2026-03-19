@@ -1,3 +1,4 @@
+// champsim_tracer.cpp
 /*
  *    Copyright 2023 The ChampSim Contributors
  *
@@ -106,6 +107,7 @@ void WriteToSet(T* begin, T* end, UINT32 r)
   *found_reg = r;
 }
 
+#include <iostream>
 void WriteEvent(unsigned char type, uint64_t addr, uint64_t size, uint32_t tid, ADDRINT ip) {
     trace_instr_format_t ev;
     memset(&ev, 0, sizeof(ev));
@@ -113,10 +115,8 @@ void WriteEvent(unsigned char type, uint64_t addr, uint64_t size, uint32_t tid, 
     ev.ip = ip;                     // 可选：记录发生事件的指令地址
     ev.is_malloc = type;
 
-    // 约定：使用 source_memory[0] 存储地址，destination_memory[0] 存储大小
-    // 对于 free，size 可忽略（设为 0）
-    ev.source_memory[0] = size;     // 地址
-    ev.destination_memory[0] = addr; // 大小
+    ev.addr = addr;
+    ev.size = size;
 
     // 如果需要线程ID，可放入 source_memory[1] 或某个寄存器数组
     // ev.source_memory[1] = tid;
@@ -124,7 +124,7 @@ void WriteEvent(unsigned char type, uint64_t addr, uint64_t size, uint32_t tid, 
     outfile.write(reinterpret_cast<const char*>(&ev), sizeof(ev));
 }
 
-thread_local uint64_t tls_malloc_size = 0;
+uint64_t tls_malloc_size = 0;
 
 void MallocEntry(THREADID tid, uint64_t size) {
     tls_malloc_size = size;
@@ -148,44 +148,39 @@ VOID ImageLoad(IMG img, VOID* v)
     RTN mallocRtn = RTN_FindByName(img, "malloc");
     if (RTN_Valid(mallocRtn)) {
         RTN_Open(mallocRtn);
-
         // malloc(size)
         RTN_InsertCall(mallocRtn, IPOINT_BEFORE, (AFUNPTR)MallocEntry,
                        IARG_THREAD_ID,
                        IARG_FUNCARG_ENTRYPOINT_VALUE, 0, // size
                        IARG_END);
-
         // 返回值（分配地址）
         RTN_InsertCall(mallocRtn, IPOINT_AFTER, (AFUNPTR)MallocExit,
                        IARG_THREAD_ID,
                        IARG_FUNCRET_EXITPOINT_VALUE,     // ret ptr
                        IARG_INST_PTR,                   // call site IP（可选）
                        IARG_END);
-
         RTN_Close(mallocRtn);
     }
-
     // ===== hook free =====
     RTN freeRtn = RTN_FindByName(img, "free");
     if (RTN_Valid(freeRtn)) {
         RTN_Open(freeRtn);
-
         // free(ptr)
         RTN_InsertCall(freeRtn, IPOINT_BEFORE, (AFUNPTR)FreeEntry,
                        IARG_THREAD_ID,
                        IARG_FUNCARG_ENTRYPOINT_VALUE, 0, // ptr
                        IARG_INST_PTR,
                        IARG_END);
-
         RTN_Close(freeRtn);
     }
-    #include <ctime>
 }
-
 
 /* ===================================================================== */
 // Instrumentation callbacks
 /* ===================================================================== */
+
+REG scratch_reg0 = PIN_ClaimToolRegister();
+REG scratch_reg1 = PIN_ClaimToolRegister();
 
 // Is called for every instruction and instruments reads and writes
 VOID Instruction(INS ins, VOID* v)
@@ -225,6 +220,38 @@ VOID Instruction(INS ins, VOID* v)
       INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)WriteToSet<unsigned long long int>, IARG_PTR, curr_instr.destination_memory, IARG_PTR,
                      curr_instr.destination_memory + NUM_INSTR_DESTINATIONS, IARG_MEMORYOP_EA, memOp, IARG_END);
   }
+
+  // if (INS_IsCall(ins))
+  //   {
+  //       // 获取函数名
+  //       RTN rtn = INS_Rtn(ins);
+  //       if (RTN_Valid(rtn))
+  //       {
+  //           std::string name = INS_Name(rtn);
+  //           // malloc 插桩
+  //           if (name == "malloc")
+  //           {
+  //               INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)MallocEntry,
+  //                              IARG_THREAD_ID,
+  //                              IARG_FUNCARG_ENTRYPOINT_VALUE, 0, // size 参数
+  //                              IARG_END);
+
+  //               INS_InsertCall(ins, IPOINT_AFTER, (AFUNPTR)MallocExit,
+  //                              IARG_THREAD_ID,
+  //                              IARG_CONTEXT,
+  //                              IARG_END);
+  //           }
+  //           // free 插桩
+  //           if (name == "free")
+  //           {
+  //               INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)FreeEntry,
+  //                              IARG_THREAD_ID,
+  //                              IARG_FUNCARG_CALLSITE_VALUE, 0, // ptr
+  //                              IARG_END);
+  //           }
+  //       }
+  //   }
+
 
   // finalize each instruction with this function
   INS_InsertIfCall(ins, IPOINT_BEFORE, (AFUNPTR)ShouldWrite, IARG_END);

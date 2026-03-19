@@ -104,6 +104,8 @@ struct ooo_model_instr : champsim::program_ordered<ooo_model_instr> {
   bool branch_mispredicted = false; // A branch can be mispredicted even if the direction prediction is correct when the predicted target is not correct
 
   unsigned char is_malloc = false;
+  unsigned long addr = 0;
+  unsigned long size = 0;
 
   std::array<uint8_t, 2> asid = {std::numeric_limits<uint8_t>::max(), std::numeric_limits<uint8_t>::max()};
 
@@ -135,9 +137,11 @@ private:
   ooo_model_instr(T instr, std::array<uint8_t, 2> local_asid) : 
   ip(instr.ip), 
   is_branch(instr.is_branch), 
-  is_malloc(instr.is_malloc),
   branch_taken(instr.branch_taken), 
-  asid(local_asid)
+  asid(local_asid),
+  is_malloc(instr.is_malloc),
+  addr(instr.addr),
+  size(instr.size)
   {
     std::remove_copy(std::begin(instr.destination_registers), std::end(instr.destination_registers), std::back_inserter(this->destination_registers), 0);
     std::remove_copy(std::begin(instr.source_registers), std::end(instr.source_registers), std::back_inserter(this->source_registers), 0);

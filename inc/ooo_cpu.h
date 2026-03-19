@@ -405,8 +405,7 @@ struct ObjectInfo {
     uint64_t miss_count_llc = 0;
 };
 
-std::map<uint64_t, ObjectInfo*> live_table; // 当前活跃对象（地址 → object）
-std::unordered_map<uint64_t, ObjectInfo> history_table; // 所有对象（object_id → object）
+
 
 ObjectInfo* find_object(uint64_t addr);
 

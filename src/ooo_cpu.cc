@@ -30,6 +30,9 @@
 #include "instruction.h"
 #include "util/span.h"
 
+std::map<uint64_t, ObjectInfo*> live_table; // 当前活跃对象（地址 → object）
+std::unordered_map<uint64_t, ObjectInfo> history_table; // 所有对象（object_id → object）
+
 std::chrono::seconds elapsed_time();
 
 constexpr long long STAT_PRINTING_PERIOD = 10000000;
@@ -107,14 +110,14 @@ void O3_CPU::end_phase(unsigned finished_cpu)
 
 uint64_t global_object_id = 0;
 
+#include <iostream>
 void O3_CPU::handle_malloc_event(const ooo_model_instr& instr)
 {
-    if (instr.source_memory.empty() || instr.destination_memory.empty())
-        return;
+    uint64_t size = instr.size;
+    uint64_t addr = instr.addr;
+    // if(addr == 0) return;
 
-    uint64_t addr = instr.source_memory[0].to<uint64_t>();
-    uint64_t size = instr.destination_memory[0].to<uint64_t>();
-
+    printf("%d, %d\n", size, addr);
     ObjectInfo obj;
     obj.object_id = global_object_id++;
     obj.base_addr = addr;
@@ -128,10 +131,8 @@ void O3_CPU::handle_malloc_event(const ooo_model_instr& instr)
 
 void O3_CPU::handle_free_event(const ooo_model_instr& instr)
 {
-    if (instr.source_memory.empty())
-        return;
-
-    uint64_t addr = instr.source_memory[0].to<uint64_t>();
+    uint64_t addr = instr.addr;
+    if(addr == 0) return;
 
     auto it = live_table.find(addr);
     if (it == live_table.end())

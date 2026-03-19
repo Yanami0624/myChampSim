@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+ // plain_printer.cc
 #include <cmath>
 #include <numeric>
 #include <ratio>
@@ -25,6 +26,11 @@
 #include <fmt/ostream.h>
 
 #include "stats_printer.h"
+
+#include "ooo_cpu.h"
+extern std::map<uint64_t, ObjectInfo*> live_table; // 当前活跃对象（地址 → object）
+extern std::unordered_map<uint64_t, ObjectInfo> history_table; // 所有对象（object_id → object）
+extern ObjectInfo* find_object(uint64_t addr);
 
 namespace
 {
@@ -61,6 +67,8 @@ std::vector<std::string> champsim::plain_printer::format(O3_CPU::stats_type stat
     lines.push_back(fmt::format("{}: {}", branch_type_names.at(champsim::to_underlying(idx)),
                                 ::print_ratio(std::kilo::num * stats.branch_type_misses.value_or(idx, 0), stats.instrs())));
   }
+
+  
 
   return lines;
 }
@@ -201,6 +209,23 @@ std::vector<std::string> champsim::plain_printer::format(champsim::phase_stats& 
     std::move(std::begin(sublines), std::end(sublines), std::back_inserter(lines));
   }
 
+  lines.emplace_back("");
+  lines.emplace_back("OBJECT STATISTICS");
+
+  for (auto& [id, obj] : history_table) {
+    printf("%d, %d\n", obj.alloc_time, obj.free_time);
+    lines.push_back(fmt::format(
+      "OBJ {:x} {:x} {:x} \
+      L1_access {} L1_hit {} L1_miss {} \
+      L2_access {} L2_hit {} L2_miss {} \
+      LLC_access {} LLC_hit {} LLC_miss {} \
+      ",
+      id, obj.base_addr, obj.size,
+      obj.access_count_l1, obj.hit_count_l1, obj.miss_count_l1,
+      obj.access_count_l2, obj.hit_count_l2, obj.miss_count_l2,
+      obj.access_count_llc, obj.hit_count_llc, obj.miss_count_llc
+    ));
+  }
   return lines;
 }
 
