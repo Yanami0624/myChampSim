@@ -213,7 +213,7 @@ std::vector<std::string> champsim::plain_printer::format(champsim::phase_stats& 
   lines.emplace_back("OBJECT STATISTICS");
 
   for (auto& [id, obj] : history_table) {
-    printf("%d, %d\n", obj.alloc_time, obj.free_time);
+    // printf("%d, %d\n", obj.alloc_time, obj.free_time);
     lines.push_back(fmt::format(
       "OBJ {:x} {:x} {:x} \
       L1_access {} L1_hit {} L1_miss {} \

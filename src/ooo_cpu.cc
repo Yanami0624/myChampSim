@@ -115,9 +115,9 @@ void O3_CPU::handle_malloc_event(const ooo_model_instr& instr)
 {
     uint64_t size = instr.size;
     uint64_t addr = instr.addr;
-    // if(addr == 0) return;
+    if(addr == 0) return;
 
-    printf("%d, %d\n", size, addr);
+    printf("%08x, %08x\n", size, addr);
     ObjectInfo obj;
     obj.object_id = global_object_id++;
     obj.base_addr = addr;
@@ -176,6 +176,7 @@ void O3_CPU::initialize_instruction()
     // 过滤 malloc/free
     auto& instr = input_queue.front();
     if (instr.is_malloc) {
+      printf("into is_malloc\n");
         switch (instr.is_malloc) {
           case INSTR_MALLOC:
             handle_malloc_event(instr);

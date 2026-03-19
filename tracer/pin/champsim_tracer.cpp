@@ -146,13 +146,15 @@ VOID ImageLoad(IMG img, VOID* v)
 {
     // ===== hook malloc =====
     RTN mallocRtn = RTN_FindByName(img, "malloc");
+    printf(">>>>>>>>>>>>>>>>>>>>>\n");
     if (RTN_Valid(mallocRtn)) {
+      std::cout << "<<<<<<<<<<<<<<<<<<<<<< " << RTN_Name(mallocRtn) << "\n";
         RTN_Open(mallocRtn);
         // malloc(size)
         RTN_InsertCall(mallocRtn, IPOINT_BEFORE, (AFUNPTR)MallocEntry,
                        IARG_THREAD_ID,
                        IARG_FUNCARG_ENTRYPOINT_VALUE, 0, // size
-                       IARG_END);
+                       IARG_END);        
         // 返回值（分配地址）
         RTN_InsertCall(mallocRtn, IPOINT_AFTER, (AFUNPTR)MallocExit,
                        IARG_THREAD_ID,
@@ -276,6 +278,7 @@ VOID Fini(INT32 code, VOID* v) { outfile.close(); }
  */
 int main(int argc, char* argv[])
 {
+  PIN_InitSymbols();
   // Initialize PIN library. Print help message if -h(elp) is specified
   // in the command line or the command line is invalid
   if (PIN_Init(argc, argv))
