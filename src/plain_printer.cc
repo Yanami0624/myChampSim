@@ -30,6 +30,7 @@
 #include "ooo_cpu.h"
 extern std::map<uint64_t, ObjectInfo*> live_table; // 当前活跃对象（地址 → object）
 extern std::unordered_map<uint64_t, ObjectInfo> history_table; // 所有对象（object_id → object）
+extern std::unordered_map<uint64_t, uint64_t> instr_to_addr; // (指令ip → addr)
 extern ObjectInfo* find_object(uint64_t addr);
 
 namespace
@@ -215,17 +216,25 @@ std::vector<std::string> champsim::plain_printer::format(champsim::phase_stats& 
   for (auto& [id, obj] : history_table) {
     // printf("%d, %d\n", obj.alloc_time, obj.free_time);
     lines.push_back(fmt::format(
-      "OBJ {:x} {:x} {:x} \
-      L1_access {} L1_hit {} L1_miss {} \
-      L2_access {} L2_hit {} L2_miss {} \
-      LLC_access {} LLC_hit {} LLC_miss {} \
-      ",
-      id, obj.base_addr, obj.size,
-      obj.access_count_l1, obj.hit_count_l1, obj.miss_count_l1,
-      obj.access_count_l2, obj.hit_count_l2, obj.miss_count_l2,
-      obj.access_count_llc, obj.hit_count_llc, obj.miss_count_llc
+      "OBJ {:x} {} {:x} {:x} \
+      L1_acc {} L1_hit {} L1_mis {}",
+      id, (obj.alive ? "alive" : "dead "), obj.base_addr, obj.size,
+      obj.hit_count_l1 + obj.miss_count_l1, obj.hit_count_l1, obj.miss_count_l1
     ));
   }
+
+  lines.emplace_back("");
+  lines.emplace_back("INSTR_TO_ADDR");
+  for(auto& [ip, addr] : instr_to_addr) {
+    break;
+    lines.push_back(fmt::format(
+      "MAPPING {} {}",
+      ip, addr
+    ));
+  }
+
+
+
   return lines;
 }
 

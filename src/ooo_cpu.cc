@@ -117,7 +117,8 @@ void O3_CPU::handle_malloc_event(const ooo_model_instr& instr)
     uint64_t addr = instr.addr;
     if(addr == 0) return;
 
-    printf("%08x, %08x\n", size, addr);
+    // printf("MALLOC base=%lx size=%lx\n", addr, size);
+    // printf("%08x, %08x\n", size, addr);
     ObjectInfo obj;
     obj.object_id = global_object_id++;
     obj.base_addr = addr;
@@ -138,6 +139,9 @@ void O3_CPU::handle_free_event(const ooo_model_instr& instr)
     if (it == live_table.end())
         return;
 
+      auto ptr = it->second;
+      // printf("%ld, %ld, %ld\n", ptr->base_addr, addr, ptr->base_addr + ptr->size);
+
     ObjectInfo* obj = it->second;
     obj->alive = false;
     obj->free_time = current_time;
@@ -145,7 +149,6 @@ void O3_CPU::handle_free_event(const ooo_model_instr& instr)
     live_table.erase(it);
 }
 
-// TODO optimize
 ObjectInfo* find_object(uint64_t addr)
 {
     auto it = live_table.upper_bound(addr);
@@ -157,7 +160,8 @@ ObjectInfo* find_object(uint64_t addr)
     --it;
     
     auto& [base, obj] = *it;
-    if (addr < base + obj->size) {
+    if (addr >= base && addr < base + obj->size) {
+      printf("%ld, %ld, %ld\n", base, addr, base + obj->size);
         return obj;
     }
     
@@ -176,7 +180,6 @@ void O3_CPU::initialize_instruction()
     // 过滤 malloc/free
     auto& instr = input_queue.front();
     if (instr.is_malloc) {
-      printf("into is_malloc\n");
         switch (instr.is_malloc) {
           case INSTR_MALLOC:
             handle_malloc_event(instr);
@@ -590,6 +593,7 @@ void O3_CPU::do_memory_scheduling(ooo_model_instr& instr)
   for (auto& smem : instr.source_memory) {
     auto q_entry = std::find_if_not(std::begin(LQ), std::end(LQ), [](const auto& lq_entry) { return lq_entry.has_value(); });
     assert(q_entry != std::end(LQ));
+    // printf("do_memory_scheduling: %ld\n", smem);
     q_entry->emplace(smem, instr.instr_id, instr.ip, instr.asid); // add it to the load queue
 
     // Check for forwarding

@@ -108,11 +108,10 @@ void WriteToSet(T* begin, T* end, UINT32 r)
 }
 
 #include <iostream>
-void WriteEvent(unsigned char type, uint64_t addr, uint64_t size, uint32_t tid, ADDRINT ip) {
+void WriteEvent(unsigned char type, uint64_t addr, uint64_t size, uint32_t tid) {
     trace_instr_format_t ev;
     memset(&ev, 0, sizeof(ev));
 
-    ev.ip = ip;                     // 可选：记录发生事件的指令地址
     ev.is_malloc = type;
 
     ev.addr = addr;
@@ -130,15 +129,15 @@ void MallocEntry(THREADID tid, uint64_t size) {
     tls_malloc_size = size;
 }
 
-void MallocExit(THREADID tid, uint64_t ret_val, ADDRINT ip) {
+void MallocExit(THREADID tid, uint64_t ret_val) {
     if (ret_val != 0) {
-        WriteEvent(INSTR_MALLOC, ret_val, tls_malloc_size, tid, ip);
+        WriteEvent(INSTR_MALLOC, ret_val, tls_malloc_size, tid);
     }
 }
 
-void FreeEntry(THREADID tid, uint64_t ptr, ADDRINT ip) {
+void FreeEntry(THREADID tid, uint64_t ptr) {
     if (ptr != 0) {
-        WriteEvent(INSTR_FREE, ptr, 0, tid, ip);  // free 大小设为0
+        WriteEvent(INSTR_FREE, ptr, 0, tid);  // free 大小设为0
     }
 }
 
@@ -146,9 +145,7 @@ VOID ImageLoad(IMG img, VOID* v)
 {
     // ===== hook malloc =====
     RTN mallocRtn = RTN_FindByName(img, "malloc");
-    printf(">>>>>>>>>>>>>>>>>>>>>\n");
     if (RTN_Valid(mallocRtn)) {
-      std::cout << "<<<<<<<<<<<<<<<<<<<<<< " << RTN_Name(mallocRtn) << "\n";
         RTN_Open(mallocRtn);
         // malloc(size)
         RTN_InsertCall(mallocRtn, IPOINT_BEFORE, (AFUNPTR)MallocEntry,
@@ -159,7 +156,6 @@ VOID ImageLoad(IMG img, VOID* v)
         RTN_InsertCall(mallocRtn, IPOINT_AFTER, (AFUNPTR)MallocExit,
                        IARG_THREAD_ID,
                        IARG_FUNCRET_EXITPOINT_VALUE,     // ret ptr
-                       IARG_INST_PTR,                   // call site IP（可选）
                        IARG_END);
         RTN_Close(mallocRtn);
     }
@@ -171,7 +167,6 @@ VOID ImageLoad(IMG img, VOID* v)
         RTN_InsertCall(freeRtn, IPOINT_BEFORE, (AFUNPTR)FreeEntry,
                        IARG_THREAD_ID,
                        IARG_FUNCARG_ENTRYPOINT_VALUE, 0, // ptr
-                       IARG_INST_PTR,
                        IARG_END);
         RTN_Close(freeRtn);
     }
@@ -218,7 +213,8 @@ VOID Instruction(INS ins, VOID* v)
     if (INS_MemoryOperandIsRead(ins, memOp))
       INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)WriteToSet<unsigned long long int>, IARG_PTR, curr_instr.source_memory, IARG_PTR,
                      curr_instr.source_memory + NUM_INSTR_SOURCES, IARG_MEMORYOP_EA, memOp, IARG_END);
-    if (INS_MemoryOperandIsWritten(ins, memOp))
+      // printf("Instruction: %lld\n", curr_instr.source_memory[0]);
+                     if (INS_MemoryOperandIsWritten(ins, memOp))
       INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)WriteToSet<unsigned long long int>, IARG_PTR, curr_instr.destination_memory, IARG_PTR,
                      curr_instr.destination_memory + NUM_INSTR_DESTINATIONS, IARG_MEMORYOP_EA, memOp, IARG_END);
   }

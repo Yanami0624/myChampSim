@@ -265,17 +265,9 @@ void match(std::string name, int& count) {
 bool CACHE::try_hit(const tag_lookup_type& handle_pkt)
 {
   // TODO 这里的addr可能不是 object 地址而是 block 地址
-  static int cnt = 0;
-  // if(cnt++ % 10000 == 0) std::cout << NAME << ' ';
-  uint64_t addr = handle_pkt.address.to<uint64_t>();
-  auto* obj = find_object(addr);
-  if (obj) {
-    // obj->access_count_l1++;
-    // std::cout << NAME << ' ';
-    if (NAME == "cpu0_L1D") obj->access_count_l1++;
-    if (NAME == "cpu0_L2C") obj->access_count_l2++;
-    if (NAME == "LLC")      obj->access_count_llc++;
-  }
+  auto addr = handle_pkt.address.to<uint64_t>();
+  if(live_table.find(addr) != live_table.end()) printf("hit\n");
+
 
   cpu = handle_pkt.cpu;
 
@@ -303,6 +295,7 @@ bool CACHE::try_hit(const tag_lookup_type& handle_pkt)
 
   if (hit) {
     uint64_t addr = handle_pkt.address.to<uint64_t>();
+    // std::cout << std::hex << addr << std::endl;
     auto* obj = find_object(addr);
     if (obj) {
       if (NAME == "cpu0_L1D") obj->hit_count_l1++;
