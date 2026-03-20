@@ -161,7 +161,7 @@ ObjectInfo* find_object(uint64_t addr)
     
     auto& [base, obj] = *it;
     if (addr >= base && addr < base + obj->size) {
-      printf("%ld, %ld, %ld\n", base, addr, base + obj->size);
+      // printf("%ld, %ld, %ld\n", base, addr, base + obj->size);
         return obj;
     }
     
@@ -705,8 +705,9 @@ bool O3_CPU::execute_load(const LSQ_ENTRY& lq_entry)
   data_packet.instr_id = lq_entry.instr_id;
   data_packet.ip = lq_entry.ip;
 
-  if constexpr (champsim::debug_print) {
-    fmt::print("[LQ] {} instr_id: {} vaddr: {}\n", __func__, data_packet.instr_id, data_packet.v_address);
+  static long long cnt = 0;
+  if (0) {
+    fmt::print("[LQ] {} instr_id: {} addr: {}\n", __func__, data_packet.instr_id, data_packet.address);
   }
 
   return L1D_bus.issue_read(data_packet);

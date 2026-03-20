@@ -100,7 +100,7 @@ void BranchOrNot(UINT32 taken)
 }
 
 template <typename T>
-void WriteToSet(T* begin, T* end, UINT32 r)
+void WriteToSet(T* begin, T* end, UINT64 r)
 {
   auto set_end = std::find(begin, end, 0);
   auto found_reg = std::find(begin, set_end, r); // check to see if this register is already in the list
