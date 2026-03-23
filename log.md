@@ -25,11 +25,8 @@ ooo_cpu.cc
         handle_malloc_event
         handle_free_event
 
-5. cache层统计object的 access, hit, miss // TODO: block != object
+5. cache层统计object的 access, hit, miss
 cache.cc
 
 6. 输出
 plain_printer.cc
-
-
-test.cpp没有malloc，为什么live_table查得到object？？？？？？？？？

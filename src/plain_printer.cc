@@ -339,6 +339,33 @@ void print_object_stats(
     }
 }
 
+#include <fstream>
+
+// 新增一个函数：导出对象 size, access_count, lifetime
+void export_object_stats_for_plot(const std::unordered_map<uint64_t, ObjectInfo>& history_table,
+                                  const std::string& filename,
+                                  uint64_t current_time)
+{
+    std::ofstream fout(filename);
+    if (!fout.is_open()) return;
+
+    // CSV header
+    fout << "ID,SIZE,ACCESS_COUNT,LIFETIME\n";
+
+    for (const auto& [id, obj] : history_table) {
+        if(obj.alive) continue;
+
+        uint64_t access_count = obj.hit_count_l1 + obj.miss_count_l1;
+        uint64_t lifetime = obj.alive ? 0 : (obj.free_time - obj.alloc_time).count();
+
+        fout << id << ","
+             << obj.size << ","
+             << access_count << ","
+             << lifetime << "\n";
+    }
+    fout.close();
+}
+
 void champsim::plain_printer::print(champsim::phase_stats& stats)
 {
   auto lines = format(stats);
@@ -397,33 +424,25 @@ std::vector<std::string> champsim::plain_printer::format(champsim::phase_stats& 
 
   PrintConfig cfg;
 
-cfg.show_state     = true;
-cfg.show_base_addr = false;
-cfg.show_size      = true;
-cfg.show_lifetime  = true;
+  cfg.show_state     = true;
+  cfg.show_base_addr = false;
+  cfg.show_size      = true;
+  cfg.show_lifetime  = true;
 
-cfg.show_l1  = true;
-cfg.show_l2  = true;
-cfg.show_llc = false;
+  cfg.show_l1  = true;
+  cfg.show_l2  = true;
+  cfg.show_llc = false;
 
-cfg.show_hit_rate = true;
+  cfg.show_hit_rate = true;
 
-print_object_stats(
+  print_object_stats(
     lines,
     history_table,
     cfg,
     clock()   // 或 global_clock
-);
+  );
 
-  // lines.emplace_back("");
-  // lines.emplace_back("INSTR_TO_ADDR");
-  // for(auto& [ip, addr] : instr_to_addr) {
-  //   break;
-  //   lines.push_back(fmt::format(
-  //     "MAPPING {} {}",
-  //     ip, addr
-  //   ));
-  // }
+  export_object_stats_for_plot(history_table, "object_stats.csv", clock());
 
   return lines;
 }
