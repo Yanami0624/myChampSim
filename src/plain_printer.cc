@@ -154,6 +154,191 @@ std::vector<std::string> champsim::plain_printer::format(DRAM_CHANNEL::stats_typ
   return lines;
 }
 
+struct PrintConfig {
+
+    // 基本信息
+    bool show_state      = true;
+    bool show_base_addr  = true;
+    bool show_size       = true;
+
+    // 生命周期
+    bool show_lifetime   = true;
+
+    // cache 层
+    bool show_l1         = true;
+    bool show_l2         = true;
+    bool show_llc        = true;
+
+    bool show_hit_rate   = true;
+
+    // 过滤
+    bool show_only_alive = false;
+};
+
+static inline uint64_t compute_lifetime(
+    const ObjectInfo& obj,
+    uint64_t current_time)
+{
+    if (obj.alive) {
+        return 0;
+    }
+
+
+    auto diff = obj.free_time - obj.alloc_time;
+    return static_cast<uint64_t>(diff.count());
+}
+
+void print_object_stats(
+    std::vector<std::string>& lines,
+    const std::unordered_map<uint64_t, ObjectInfo>& history_table,
+    const PrintConfig& cfg,
+    uint64_t current_time)
+{
+    lines.emplace_back("");
+    lines.emplace_back("OBJECT STATISTICS");
+
+    lines.emplace_back(
+"--------------------------------------------------------------------------------------------------------------");
+
+    std::string header;
+
+    header += fmt::format("{:<8}", "ID");
+
+    if (cfg.show_state)
+        header += fmt::format(" {:<6}", "STATE");
+
+    if (cfg.show_base_addr)
+        header += fmt::format(" {:<16}", "BASE_ADDR");
+
+    if (cfg.show_size)
+        header += fmt::format(" {:<10}", "SIZE");
+
+    if (cfg.show_lifetime)
+        header += fmt::format(" {:<10}", "LIFETIME");
+
+    if (cfg.show_l1) {
+
+        header += fmt::format(
+            " {:<7} {:<7} {:<8}",
+            "L1_ACC",
+            "L1_HIT",
+            "L1_MISS"
+        );
+
+        if (cfg.show_hit_rate)
+            header += fmt::format(" {:<6}", "L1_HR");
+    }
+
+    if (cfg.show_l2) {
+
+        header += fmt::format(
+            " {:<7} {:<7} {:<8}",
+            "L2_ACC",
+            "L2_HIT",
+            "L2_MISS"
+        );
+    }
+
+    if (cfg.show_llc) {
+
+        header += fmt::format(
+            " {:<7} {:<7} {:<8}",
+            "LLC_ACC",
+            "LLC_HIT",
+            "LLC_MISS"
+        );
+    }
+
+    lines.push_back(header);
+
+    lines.emplace_back(
+"--------------------------------------------------------------------------------------------------------------");
+
+    for (const auto& [id, obj] : history_table) {
+
+        if (cfg.show_only_alive && !obj.alive)
+            continue;
+
+        uint64_t l1_acc  = obj.hit_count_l1  + obj.miss_count_l1;
+        uint64_t l2_acc  = obj.hit_count_l2  + obj.miss_count_l2;
+        uint64_t llc_acc = obj.hit_count_llc + obj.miss_count_llc;
+
+        double l1_hr =
+            (l1_acc == 0)
+            ? 0.0
+            : 100.0 * obj.hit_count_l1 / l1_acc;
+
+        uint64_t lifetime =
+            compute_lifetime(obj, current_time);
+
+        std::string row;
+
+        row += fmt::format("{:<8x}", id);
+
+        if (cfg.show_state)
+            row += fmt::format(
+                " {:<6}",
+                (obj.alive ? "alive" : "dead")
+            );
+
+        if (cfg.show_base_addr)
+            row += fmt::format(
+                " {:<16x}",
+                obj.base_addr
+            );
+
+        if (cfg.show_size)
+            row += fmt::format(
+                " {:<10x}",
+                obj.size
+            );
+
+        if (cfg.show_lifetime)
+            row += fmt::format(
+                " {:<10}",
+                lifetime
+            );
+
+        if (cfg.show_l1) {
+
+            row += fmt::format(
+                " {:<7} {:<7} {:<8}",
+                l1_acc,
+                obj.hit_count_l1,
+                obj.miss_count_l1
+            );
+
+            if (cfg.show_hit_rate)
+                row += fmt::format(
+                    " {:<5.1f}%",
+                    l1_hr
+                );
+        }
+
+        if (cfg.show_l2) {
+
+            row += fmt::format(
+                " {:<7} {:<7} {:<8}",
+                l2_acc,
+                obj.hit_count_l2,
+                obj.miss_count_l2
+            );
+        }
+
+        if (cfg.show_llc) {
+
+            row += fmt::format(
+                " {:<7} {:<7} {:<8}",
+                llc_acc,
+                obj.hit_count_llc,
+                obj.miss_count_llc
+            );
+        }
+
+        lines.push_back(row);
+    }
+}
+
 void champsim::plain_printer::print(champsim::phase_stats& stats)
 {
   auto lines = format(stats);
@@ -210,30 +395,35 @@ std::vector<std::string> champsim::plain_printer::format(champsim::phase_stats& 
     std::move(std::begin(sublines), std::end(sublines), std::back_inserter(lines));
   }
 
-  lines.emplace_back("");
-  lines.emplace_back("OBJECT STATISTICS");
+  PrintConfig cfg;
 
-  for (auto& [id, obj] : history_table) {
-    // printf("%d, %d\n", obj.alloc_time, obj.free_time);
-    lines.push_back(fmt::format(
-      "OBJ {:x} {} {:x} {:x} \
-      L1_acc {} L1_hit {} L1_mis {}",
-      id, (obj.alive ? "alive" : "dead "), obj.base_addr, obj.size,
-      obj.hit_count_l1 + obj.miss_count_l1, obj.hit_count_l1, obj.miss_count_l1
-    ));
-  }
+cfg.show_state     = true;
+cfg.show_base_addr = false;
+cfg.show_size      = true;
+cfg.show_lifetime  = true;
 
-  lines.emplace_back("");
-  lines.emplace_back("INSTR_TO_ADDR");
-  for(auto& [ip, addr] : instr_to_addr) {
-    break;
-    lines.push_back(fmt::format(
-      "MAPPING {} {}",
-      ip, addr
-    ));
-  }
+cfg.show_l1  = true;
+cfg.show_l2  = true;
+cfg.show_llc = false;
 
+cfg.show_hit_rate = true;
 
+print_object_stats(
+    lines,
+    history_table,
+    cfg,
+    clock()   // 或 global_clock
+);
+
+  // lines.emplace_back("");
+  // lines.emplace_back("INSTR_TO_ADDR");
+  // for(auto& [ip, addr] : instr_to_addr) {
+  //   break;
+  //   lines.push_back(fmt::format(
+  //     "MAPPING {} {}",
+  //     ip, addr
+  //   ));
+  // }
 
   return lines;
 }

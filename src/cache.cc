@@ -253,15 +253,23 @@ bool CACHE::handle_fill(const mshr_type& fill_mshr)
   return true;
 }
 
-
-
-void match(std::string name, int& count) {
-  static std::string L1[] = {"cpu0_L1D", "cpu0_L1I"};
-  static std::string L2[] = {"cpu0_L2C"};
-  static std::string LLC[] = {"LLC"};
-  
+inline void match(const std::string& name,
+                  ObjectInfo* obj,
+                  bool is_hit)
+{
+    if (name.find("L1") != std::string::npos) {
+        if (is_hit) obj->hit_count_l1++;
+        else obj->miss_count_l1++;
+    }
+    else if (name.find("L2") != std::string::npos) {
+        if (is_hit) obj->hit_count_l2++;
+        else obj->miss_count_l2++;
+    }
+    else if (name == "LLC") {
+        if (is_hit) obj->hit_count_llc++;
+        else obj->miss_count_llc++;
+    }
 }
-
 bool CACHE::try_hit(const tag_lookup_type& handle_pkt)
 {
   // TODO 这里的addr可能不是 object 地址而是 block 地址
@@ -294,14 +302,22 @@ bool CACHE::try_hit(const tag_lookup_type& handle_pkt)
                                 // static long long cnt = 0;
                                 // if(cnt++ % 100000 == 0) std::cout << NAME << std::endl;
   if (hit) {
-    uint64_t addr = handle_pkt.address.to<uint64_t>();
+    uint64_t addr = handle_pkt.v_address.to<uint64_t>();
+    // static int cnt = 0;
+    // if(0) printf(
+    //   "%s hit: vaddr=%lx paddr=%lx\n",
+    //   NAME.c_str(),
+    //   handle_pkt.v_address.to<uint64_t>(),
+    //   handle_pkt.address.to<uint64_t>()
+    // );
+    // if (NAME == "cpu0_L1D" && (cnt++ % 10000 == 0)) printf("L1D hit: %lx\n", addr);
+    // if (NAME == "cpu0_DTLB" && (cnt++ % 10000 == 0)) printf("DTLB hit: %lx\n", addr);
     auto* obj = find_object(addr);
     if (obj) {
-      obj->hit_count_l1++;
-      std::cout << NAME << std::endl;
-      if (NAME == "cpu0_L1D" || NAME == "cpu0_L1I") obj->hit_count_l1++;
-      if (NAME == "cpu0_L2C") obj->hit_count_l2++;
-      if (NAME == "LLC")      obj->hit_count_llc++;
+      // obj->hit_count_l1++;
+      // std::cout << NAME << std::endl;
+      // printf("%s hit obj: %lx\n", NAME.c_str(), addr);
+      match(NAME, obj, true);
     }
 
     sim_stats.hits.increment(std::pair{handle_pkt.type, handle_pkt.cpu});
@@ -374,13 +390,13 @@ bool CACHE::handle_miss(const tag_lookup_type& handle_pkt)
       }
     }
 
-    uint64_t addr = handle_pkt.address.to<uint64_t>();
+    uint64_t addr = handle_pkt.v_address.to<uint64_t>();
+    // static int cnt = 0;
+    // if (NAME == "cpu0_L1D" && (cnt++ % 10000 == 0)) printf("L1D miss: %lx\n", addr);
     auto* obj = find_object(addr);
     if (obj) {
-      obj->miss_count_l1++;
-      if (NAME == "cpu0_L1D") obj->miss_count_l1++;
-      if (NAME == "cpu0_L2C") obj->miss_count_l2++;
-      if (NAME == "LLC")      obj->miss_count_llc;
+      // obj->miss_count_l1++;
+      match(NAME, obj, false);
     }
 
     // COLLECT STATS

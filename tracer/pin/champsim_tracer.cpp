@@ -214,7 +214,7 @@ VOID Instruction(INS ins, VOID* v)
       INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)WriteToSet<unsigned long long int>, IARG_PTR, curr_instr.source_memory, IARG_PTR,
                      curr_instr.source_memory + NUM_INSTR_SOURCES, IARG_MEMORYOP_EA, memOp, IARG_END);
       // printf("Instruction: %lld\n", curr_instr.source_memory[0]);
-                     if (INS_MemoryOperandIsWritten(ins, memOp))
+    if (INS_MemoryOperandIsWritten(ins, memOp))
       INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)WriteToSet<unsigned long long int>, IARG_PTR, curr_instr.destination_memory, IARG_PTR,
                      curr_instr.destination_memory + NUM_INSTR_DESTINATIONS, IARG_MEMORYOP_EA, memOp, IARG_END);
   }
@@ -233,7 +233,6 @@ VOID Instruction(INS ins, VOID* v)
   //                              IARG_THREAD_ID,
   //                              IARG_FUNCARG_ENTRYPOINT_VALUE, 0, // size 参数
   //                              IARG_END);
-
   //               INS_InsertCall(ins, IPOINT_AFTER, (AFUNPTR)MallocExit,
   //                              IARG_THREAD_ID,
   //                              IARG_CONTEXT,
