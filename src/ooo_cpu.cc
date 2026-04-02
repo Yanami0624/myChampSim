@@ -113,8 +113,10 @@ uint64_t global_object_id = 0;
 #include <iostream>
 void O3_CPU::handle_malloc_event(const ooo_model_instr& instr)
 {
-    uint64_t size = instr.size;
-    uint64_t addr = instr.addr;
+    // uint64_t size = instr.size;
+    // uint64_t addr = instr.addr;
+    uint64_t size = instr.source_memory[0].to<uint64_t>();
+    uint64_t addr = instr.destination_memory[0].to<uint64_t>();
     if(addr == 0) return;
 
     // printf("MALLOC base=%lx size=%lx\n", addr, size);
@@ -132,7 +134,9 @@ void O3_CPU::handle_malloc_event(const ooo_model_instr& instr)
 
 void O3_CPU::handle_free_event(const ooo_model_instr& instr)
 {
-    uint64_t addr = instr.addr;
+    // uint64_t addr = instr.addr;
+    uint64_t addr = instr.destination_memory[0].to<uint64_t>();
+
     if(addr == 0) return;
 
     auto it = live_table.find(addr);

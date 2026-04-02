@@ -48,8 +48,6 @@ struct input_instr {
   unsigned long long source_memory[NUM_INSTR_SOURCES];           // input memory | destination_memory[0]--malloc size
 
   unsigned char is_malloc; // 0 none, 1 malloc, 2 free
-  unsigned long addr;
-  unsigned long size;
 };
 
 const unsigned char INSTR_NORMAL = 0;
@@ -71,8 +69,6 @@ struct cloudsuite_instr {
   unsigned long long source_memory[NUM_INSTR_SOURCES];                 // input memory
 
   unsigned char is_malloc;
-  unsigned long addr;
-  unsigned long size;
 
   unsigned char asid[2];
 };
