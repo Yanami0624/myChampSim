@@ -33,6 +33,10 @@
 std::map<uint64_t, ObjectInfo*> live_table; // 当前活跃对象（地址 → object）
 std::unordered_map<uint64_t, ObjectInfo> history_table; // 所有对象（object_id → object）
 
+uint64_t current_live_bytes = 0;   // 当前存活内存
+uint64_t peak_live_bytes = 0;      // 峰值存活内存
+uint64_t peak_time = 0;            // 峰值发生时间（可选）
+
 std::chrono::seconds elapsed_time();
 
 constexpr long long STAT_PRINTING_PERIOD = 10000000;
@@ -111,6 +115,11 @@ void O3_CPU::end_phase(unsigned finished_cpu)
 uint64_t global_object_id = 0;
 
 #include <iostream>
+
+static int max(int a, int b) {
+  return a > b ? a : b;
+} 
+
 void O3_CPU::handle_malloc_event(const ooo_model_instr& instr)
 {
     // uint64_t size = instr.size;
@@ -130,6 +139,9 @@ void O3_CPU::handle_malloc_event(const ooo_model_instr& instr)
 
     history_table[obj.object_id] = obj;
     live_table[addr] = &history_table[obj.object_id];
+
+    current_live_bytes += obj.size;
+    peak_live_bytes = max(peak_live_bytes, current_live_bytes);
 }
 
 void O3_CPU::handle_free_event(const ooo_model_instr& instr)
@@ -149,8 +161,10 @@ void O3_CPU::handle_free_event(const ooo_model_instr& instr)
     ObjectInfo* obj = it->second;
     obj->alive = false;
     obj->free_time = current_time;
-    
+
     live_table.erase(it);
+    
+    current_live_bytes -= obj->size;
 }
 
 ObjectInfo* find_object(uint64_t addr)

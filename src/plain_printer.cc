@@ -31,6 +31,7 @@
 extern std::map<uint64_t, ObjectInfo*> live_table; // 当前活跃对象（地址 → object）
 extern std::unordered_map<uint64_t, ObjectInfo> history_table; // 所有对象（object_id → object）
 extern std::unordered_map<uint64_t, uint64_t> instr_to_addr; // (指令ip → addr)
+extern uint64_t peak_live_bytes;
 extern ObjectInfo* find_object(uint64_t addr);
 
 namespace
@@ -175,21 +176,21 @@ void print_object_stats(
 {
     lines.emplace_back("");
     lines.emplace_back("OBJECT STATISTICS (sorted by size)");
-    lines.emplace_back("---------------------------------------------------------------------------------------------------------------------");
+    lines.emplace_back("----------------------------------------------------------------------------------------------------------------------------------------------");
 
     // 表头：DPKB 拓宽，保持对齐
     std::string header =
         fmt::format(
             "{:<8} {:<10} {:<10} {:<11} {:<8} {:<12} "
             "{:<8} {:<8} {:<8} {:<8} "
-            "{:<8} {:<8} {:<8}",
+            "{:<8} {:<8} {:<8} {:<4}",
             "ID","SIZE","LIFE","ACCESS","ACC%","DPKB",
             "L1_ACC","L1_MISS","L2_ACC","L2_MISS",
-            "MPKI","LAT","MR"
+            "MPKI","LAT","MR","PEAK_MEMRATIO%"
         );
 
     lines.push_back(header);
-    lines.emplace_back("---------------------------------------------------------------------------------------------------------------------");
+    lines.emplace_back("----------------------------------------------------------------------------------------------------------------------------------------------");
 
     uint64_t total_access = 0;
     uint64_t total_miss = 0;
@@ -227,13 +228,14 @@ void print_object_stats(
         double mpki = total_instr ? 1000.0 * obj_total_miss / total_instr : 0.0;
         double lat = obj_total_miss ? (double)obj_total_latency / obj_total_miss : 0.0;
         double mr = total_miss ? 100.0 * obj_total_miss / total_miss : 0.0;
+        double peak_mem_ratio = peak_live_bytes ? 100.0 * obj->size / peak_live_bytes : 0.0;
 
         // 数据行：DPKB 拓宽为12位，ACC%、MR 添加%符号
         std::string row =
             fmt::format(
                 "{:<8x} {:<10} {:<10} {:<10} {:<7.2f}%  {:<12.2f} "
                 "{:<8} {:<8} {:<8} {:<8} "
-                "{:<8.2f} {:<8.2f} {:<7.2f}%",
+                "{:<8.2f} {:<8.2f} {:<7.2f}% {:<7.2f}%",
                 obj->object_id,
                 obj->size,
                 lifetime,
@@ -246,7 +248,8 @@ void print_object_stats(
                 obj->miss_count_l2,
                 mpki,
                 lat,
-                mr              // MR 自动带%
+                mr,             // MR 自动带%
+                peak_mem_ratio
             );
 
         lines.push_back(row);
