@@ -401,6 +401,10 @@ struct ObjectInfo {
     uint64_t access_count_llc = 0;
     uint64_t hit_count_llc = 0;
     uint64_t miss_count_llc = 0;
+
+    uint64_t total_miss_latency_l1 = 0;
+    uint64_t total_miss_latency_l2 = 0;
+    uint64_t total_miss_latency_llc = 0;
 };
 
 ObjectInfo* find_object(uint64_t addr);

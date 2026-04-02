@@ -154,27 +154,6 @@ std::vector<std::string> champsim::plain_printer::format(DRAM_CHANNEL::stats_typ
   return lines;
 }
 
-struct PrintConfig {
-
-    // 基本信息
-    bool show_state      = true;
-    bool show_base_addr  = true;
-    bool show_size       = true;
-
-    // 生命周期
-    bool show_lifetime   = true;
-
-    // cache 层
-    bool show_l1         = true;
-    bool show_l2         = true;
-    bool show_llc        = true;
-
-    bool show_hit_rate   = true;
-
-    // 过滤
-    bool show_only_alive = false;
-};
-
 static inline uint64_t compute_lifetime(
     const ObjectInfo& obj,
     uint64_t current_time)
@@ -191,154 +170,88 @@ static inline uint64_t compute_lifetime(
 void print_object_stats(
     std::vector<std::string>& lines,
     const std::unordered_map<uint64_t, ObjectInfo>& history_table,
-    const PrintConfig& cfg,
-    uint64_t current_time)
+    uint64_t current_time,
+    uint64_t total_instr)
 {
     lines.emplace_back("");
-    lines.emplace_back("OBJECT STATISTICS");
+    lines.emplace_back("OBJECT STATISTICS (sorted by size)");
+    lines.emplace_back("---------------------------------------------------------------------------------------------------------------------");
 
-    lines.emplace_back(
-"--------------------------------------------------------------------------------------------------------------");
-
-    std::string header;
-
-    header += fmt::format("{:<8}", "ID");
-
-    if (cfg.show_state)
-        header += fmt::format(" {:<6}", "STATE");
-
-    if (cfg.show_base_addr)
-        header += fmt::format(" {:<16}", "BASE_ADDR");
-
-    if (cfg.show_size)
-        header += fmt::format(" {:<10}", "SIZE");
-
-    if (cfg.show_lifetime)
-        header += fmt::format(" {:<10}", "LIFETIME");
-
-    if (cfg.show_l1) {
-
-        header += fmt::format(
-            " {:<7} {:<7} {:<8}",
-            "L1_ACC",
-            "L1_HIT",
-            "L1_MISS"
+    // 表头：DPKB 拓宽，保持对齐
+    std::string header =
+        fmt::format(
+            "{:<8} {:<10} {:<10} {:<11} {:<8} {:<12} "
+            "{:<8} {:<8} {:<8} {:<8} "
+            "{:<8} {:<8} {:<8}",
+            "ID","SIZE","LIFE","ACCESS","ACC%","DPKB",
+            "L1_ACC","L1_MISS","L2_ACC","L2_MISS",
+            "MPKI","LAT","MR"
         );
-
-        if (cfg.show_hit_rate)
-            header += fmt::format(" {:<6}", "L1_HR");
-    }
-
-    if (cfg.show_l2) {
-
-        header += fmt::format(
-            " {:<7} {:<7} {:<8}",
-            "L2_ACC",
-            "L2_HIT",
-            "L2_MISS"
-        );
-    }
-
-    if (cfg.show_llc) {
-
-        header += fmt::format(
-            " {:<7} {:<7} {:<8}",
-            "LLC_ACC",
-            "LLC_HIT",
-            "LLC_MISS"
-        );
-    }
 
     lines.push_back(header);
+    lines.emplace_back("---------------------------------------------------------------------------------------------------------------------");
 
-    lines.emplace_back(
-"--------------------------------------------------------------------------------------------------------------");
+    uint64_t total_access = 0;
+    uint64_t total_miss = 0;
+    uint64_t total_latency = 0;
 
-    for (const auto& [id, obj] : history_table) {
-
-        if (cfg.show_only_alive && !obj.alive)
-            continue;
-
-        uint64_t l1_acc  = obj.hit_count_l1  + obj.miss_count_l1;
-        uint64_t l2_acc  = obj.hit_count_l2  + obj.miss_count_l2;
-        uint64_t llc_acc = obj.hit_count_llc + obj.miss_count_llc;
-
-        double l1_hr =
-            (l1_acc == 0)
-            ? 0.0
-            : 100.0 * obj.hit_count_l1 / l1_acc;
-
-        uint64_t lifetime =
-            compute_lifetime(obj, current_time);
-
-        std::string row;
-
-        row += fmt::format("{:<8x}", id);
-
-        if (cfg.show_state)
-            row += fmt::format(
-                " {:<6}",
-                (obj.alive ? "alive" : "dead")
-            );
-
-        if (cfg.show_base_addr)
-            row += fmt::format(
-                " {:<16x}",
-                obj.base_addr
-            );
-
-        if (cfg.show_size)
-            row += fmt::format(
-                " {:<10x}",
-                obj.size
-            );
-
-        if (cfg.show_lifetime)
-            row += fmt::format(
-                " {:<10}",
-                lifetime
-            );
-
-        if (cfg.show_l1) {
-
-            row += fmt::format(
-                " {:<7} {:<7} {:<8}",
-                l1_acc,
-                obj.hit_count_l1,
-                obj.miss_count_l1
-            );
-
-            if (cfg.show_hit_rate)
-                row += fmt::format(
-                    " {:<5.1f}%",
-                    l1_hr
-                );
+    for (const auto& [id, obj] : history_table)
+        if (!obj.alive) {
+            total_access += obj.hit_count_l1 + obj.miss_count_l1;
+            total_miss += obj.miss_count_l1 + obj.miss_count_l2;
+            total_latency += obj.total_miss_latency_l1 + obj.total_miss_latency_l2;
         }
 
-        if (cfg.show_l2) {
+    std::vector<const ObjectInfo*> objs;
+    objs.reserve(history_table.size());
+    for (const auto& [id, obj] : history_table)
+        if (!obj.alive)
+            objs.push_back(&obj);
 
-            row += fmt::format(
-                " {:<7} {:<7} {:<8}",
-                l2_acc,
-                obj.hit_count_l2,
-                obj.miss_count_l2
+    std::sort(objs.begin(), objs.end(),
+        [](const ObjectInfo* a, const ObjectInfo* b) {
+            return a->size > b->size;
+        });
+
+    for (const auto* obj : objs)
+    {
+        uint64_t access = obj->hit_count_l1 + obj->miss_count_l1;
+        uint64_t lifetime = static_cast<uint64_t>((obj->free_time - obj->alloc_time).count());
+
+        uint64_t obj_total_miss = obj->miss_count_l1 + obj->miss_count_l2;
+        uint64_t obj_total_latency = obj->total_miss_latency_l1 + obj->total_miss_latency_l2;
+
+        double access_ratio = total_access ? 100.0 * access / total_access : 0.0;
+        double dpkb = obj->size ? (double)access / (obj->size / 1024.0) : 0.0;
+
+        double mpki = total_instr ? 1000.0 * obj_total_miss / total_instr : 0.0;
+        double lat = obj_total_miss ? (double)obj_total_latency / obj_total_miss : 0.0;
+        double mr = total_miss ? 100.0 * obj_total_miss / total_miss : 0.0;
+
+        // 数据行：DPKB 拓宽为12位，ACC%、MR 添加%符号
+        std::string row =
+            fmt::format(
+                "{:<8x} {:<10} {:<10} {:<10} {:<7.2f}%  {:<12.2f} "
+                "{:<8} {:<8} {:<8} {:<8} "
+                "{:<8.2f} {:<8.2f} {:<7.2f}%",
+                obj->object_id,
+                obj->size,
+                lifetime,
+                access,
+                access_ratio,   // ACC% 自动带%
+                dpkb,           // DPKB 拓宽列宽
+                obj->hit_count_l1 + obj->miss_count_l1,
+                obj->miss_count_l1,
+                obj->hit_count_l2 + obj->miss_count_l2,
+                obj->miss_count_l2,
+                mpki,
+                lat,
+                mr              // MR 自动带%
             );
-        }
-
-        if (cfg.show_llc) {
-
-            row += fmt::format(
-                " {:<7} {:<7} {:<8}",
-                llc_acc,
-                obj.hit_count_llc,
-                obj.miss_count_llc
-            );
-        }
 
         lines.push_back(row);
     }
 }
-
 #include <fstream>
 
 // 新增一个函数：导出对象 size, access_count, lifetime
@@ -422,27 +335,19 @@ std::vector<std::string> champsim::plain_printer::format(champsim::phase_stats& 
     std::move(std::begin(sublines), std::end(sublines), std::back_inserter(lines));
   }
 
-  PrintConfig cfg;
+  uint64_t total_instr = 0;
 
-  cfg.show_state     = true;
-  cfg.show_base_addr = false;
-  cfg.show_size      = true;
-  cfg.show_lifetime  = true;
-
-  cfg.show_l1  = true;
-  cfg.show_l2  = true;
-  cfg.show_llc = false;
-
-  cfg.show_hit_rate = true;
+  for (const auto& cpu_stat : stats.roi_cpu_stats)
+    total_instr += cpu_stat.instrs();
 
   print_object_stats(
     lines,
     history_table,
-    cfg,
-    clock()   // 或 global_clock
+    clock(),
+    total_instr
   );
 
-  export_object_stats_for_plot(history_table, "object_stats.csv", clock());
+  // export_object_stats_for_plot(history_table, "object_stats.csv", clock());
 
   return lines;
 }

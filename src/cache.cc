@@ -241,9 +241,28 @@ bool CACHE::handle_fill(const mshr_type& fill_mshr)
   }
 
   // COLLECT STATS
-  if (fill_mshr.type != access_type::PREFETCH)
-    sim_stats.total_miss_latency_cycles += (current_time - (fill_mshr.time_enqueued + clock_period)) / clock_period;
-  sim_stats.mshr_return.increment(std::pair{fill_mshr.type, fill_mshr.cpu});
+  if (fill_mshr.type != access_type::PREFETCH) {
+    // sim_stats.total_miss_latency_cycles += (current_time - (fill_mshr.time_enqueued + clock_period)) / clock_period;
+      uint64_t latency = (current_time - (fill_mshr.time_enqueued + clock_period)) / clock_period;
+      sim_stats.total_miss_latency_cycles += latency;
+
+      {
+        uint64_t addr =
+        fill_mshr.v_address.to<uint64_t>();
+
+        auto* obj = find_object(addr);
+
+        if (obj)
+        {
+            if (NAME.find("L1") != std::string::npos)
+                obj->total_miss_latency_l1 += latency;
+
+            else if (NAME.find("L2") != std::string::npos)
+                obj->total_miss_latency_l2 += latency;
+        }
+      }
+    }
+    sim_stats.mshr_return.increment(std::pair{fill_mshr.type, fill_mshr.cpu});
 
   response_type response{fill_mshr.address, fill_mshr.v_address, fill_mshr.data_promise->data, metadata_thru, fill_mshr.instr_depend_on_me};
   for (auto* ret : fill_mshr.to_return) {
