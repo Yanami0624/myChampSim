@@ -167,7 +167,17 @@ static inline uint64_t compute_lifetime(
     auto diff = obj.free_time - obj.alloc_time;
     return static_cast<uint64_t>(diff.count());
 }
+static inline int bucket_of(uint64_t size)
+{
+    if (size < 1024) return 0;
+    if (size < 4 * 1024) return 1;
+    if (size < 16 * 1024) return 2;
+    if (size < 64 * 1024) return 3;
+    if (size < 256 * 1024) return 4;
+    return 5;
+}
 
+#include <filesystem>
 void print_object_stats(
     std::vector<std::string>& lines,
     const std::unordered_map<uint64_t, ObjectInfo>& history_table,
@@ -178,17 +188,14 @@ void print_object_stats(
     lines.emplace_back("OBJECT STATISTICS (sorted by size)");
     lines.emplace_back("----------------------------------------------------------------------------------------------------------------------------------------------");
 
-    // 表头：DPKB 拓宽，保持对齐
-    std::string header =
-        fmt::format(
-            "{:<8} {:<10} {:<10} {:<11} {:<8} {:<12} "
-            "{:<8} {:<8} {:<8} {:<8} "
-            "{:<8} {:<8} {:<8} {:<4}",
-            "ID","SIZE","LIFE","ACCESS","ACC%","DPKB",
-            "L1_ACC","L1_MISS","L2_ACC","L2_MISS",
-            "MPKI","LAT","MR","PEAK_MEMRATIO%"
-        );
-
+    std::string header = fmt::format(
+        "{:<8} {:<10} {:<10} {:<11} {:<8} {:<12} "
+        "{:<8} {:<8} {:<8} {:<8} "
+        "{:<8} {:<8} {:<8} {:<4}",
+        "ID","SIZE","LIFE","ACCESS","ACC%","DPKB",
+        "L1_ACC","L1_MISS","L2_ACC","L2_MISS",
+        "MPKI","LAT","MR","PEAK_MEMRATIO%"
+    );
     lines.push_back(header);
     lines.emplace_back("----------------------------------------------------------------------------------------------------------------------------------------------");
 
@@ -196,92 +203,108 @@ void print_object_stats(
     uint64_t total_miss = 0;
     uint64_t total_latency = 0;
 
-    for (const auto& [id, obj] : history_table)
+    for (const auto& [id, obj] : history_table) {
         if (!obj.alive) {
             total_access += obj.hit_count_l1 + obj.miss_count_l1;
             total_miss += obj.miss_count_l1 + obj.miss_count_l2;
             total_latency += obj.total_miss_latency_l1 + obj.total_miss_latency_l2;
         }
+    }
 
     std::vector<const ObjectInfo*> objs;
     objs.reserve(history_table.size());
-    for (const auto& [id, obj] : history_table)
+    for (const auto& [id, obj] : history_table) {
         if (!obj.alive)
             objs.push_back(&obj);
+    }
 
-    std::sort(objs.begin(), objs.end(),
-        [](const ObjectInfo* a, const ObjectInfo* b) {
-            return a->size > b->size;
-        });
+    std::sort(objs.begin(), objs.end(), [](const ObjectInfo* a, const ObjectInfo* b) {
+        return a->size > b->size;
+    });
 
-    for (const auto* obj : objs)
-    {
+    // ---------------- CSV FILES ----------------
+    
+    std::filesystem::create_directories("csvs");
+    std::ofstream f_lifetime("csvs/size_vs_lifetime.csv");
+    std::ofstream f_miss("csvs/size_vs_miss.csv");
+    std::ofstream f_density("csvs/size_vs_density.csv");
+    std::ofstream f_missrate("csvs/size_vs_missrate.csv");
+    std::ofstream f_memratio("csvs/size_vs_memratio.csv");
+
+    f_lifetime << "size,lifetime\n";
+    f_miss << "size,miss\n";
+    f_density << "size,density\n";
+    f_missrate << "size,miss_rate\n";
+    f_memratio << "size,mem_ratio\n";
+
+    struct BucketStat {
+        uint64_t count = 0;
+        double lifetime = 0;
+        double miss = 0;
+        double access = 0;
+        double density = 0;
+        double memratio = 0;
+    };
+    BucketStat bucket[6];
+
+    for (const auto* obj : objs) {
         uint64_t access = obj->hit_count_l1 + obj->miss_count_l1;
-        uint64_t lifetime = static_cast<uint64_t>((obj->free_time - obj->alloc_time).count());
-
+        uint64_t lifetime = (obj->free_time - obj->alloc_time).count();
         uint64_t obj_total_miss = obj->miss_count_l1 + obj->miss_count_l2;
         uint64_t obj_total_latency = obj->total_miss_latency_l1 + obj->total_miss_latency_l2;
 
         double access_ratio = total_access ? 100.0 * access / total_access : 0.0;
-        double dpkb = obj->size ? (double)access / (obj->size / 1024.0) : 0.0;
-
+        double density = obj->size ? (double)access / (obj->size / 1024.0) : 0.0;
         double mpki = total_instr ? 1000.0 * obj_total_miss / total_instr : 0.0;
         double lat = obj_total_miss ? (double)obj_total_latency / obj_total_miss : 0.0;
-        double mr = total_miss ? 100.0 * obj_total_miss / total_miss : 0.0;
+        double mr = access ? (double)obj_total_miss / access : 0.0;
         double peak_mem_ratio = peak_live_bytes ? 100.0 * obj->size / peak_live_bytes : 0.0;
 
-        // 数据行：DPKB 拓宽为12位，ACC%、MR 添加%符号
-        std::string row =
-            fmt::format(
-                "{:<8x} {:<10} {:<10} {:<10} {:<7.2f}%  {:<12.2f} "
-                "{:<8} {:<8} {:<8} {:<8} "
-                "{:<8.2f} {:<8.2f} {:<7.2f}% {:<7.2f}%",
-                obj->object_id,
-                obj->size,
-                lifetime,
-                access,
-                access_ratio,   // ACC% 自动带%
-                dpkb,           // DPKB 拓宽列宽
-                obj->hit_count_l1 + obj->miss_count_l1,
-                obj->miss_count_l1,
-                obj->hit_count_l2 + obj->miss_count_l2,
-                obj->miss_count_l2,
-                mpki,
-                lat,
-                mr,             // MR 自动带%
-                peak_mem_ratio
-            );
-
+        // -------- console table --------
+        std::string row = fmt::format(
+            "{:<8x} {:<10} {:<10} {:<10} {:<7.2f}%  {:<12.2f} "
+            "{:<8} {:<8} {:<8} {:<8} "
+            "{:<8.2f} {:<8.2f} {:<7.2f}% {:<7.2f}%",
+            obj->object_id, obj->size, lifetime, access, access_ratio, density,
+            obj->hit_count_l1 + obj->miss_count_l1, obj->miss_count_l1,
+            obj->hit_count_l2 + obj->miss_count_l2, obj->miss_count_l2,
+            mpki, lat, mr * 100.0, peak_mem_ratio
+        );
         lines.push_back(row);
+
+        // -------- CSV output --------
+        f_lifetime << obj->size << "," << lifetime << "\n";
+        f_miss << obj->size << "," << obj_total_miss << "\n";
+        f_density << obj->size << "," << density << "\n";
+        f_missrate << obj->size << "," << mr << "\n";
+        f_memratio << obj->size << "," << peak_mem_ratio << "\n";
+
+        // -------- bucket --------
+        int b = bucket_of(obj->size);
+        bucket[b].count++;
+        bucket[b].lifetime += lifetime;
+        bucket[b].miss += obj_total_miss;
+        bucket[b].access += access;
+        bucket[b].density += density;
+        bucket[b].memratio += peak_mem_ratio;
+    }
+
+    // ---------------- bucket csv ----------------
+    std::ofstream f_bucket("csvs/bucket_stats.csv");
+    f_bucket << "bucket,avg_lifetime,avg_miss,avg_access,avg_density,avg_memratio\n";
+
+    for (int i = 0; i < 6; i++) {
+        if (bucket[i].count == 0) continue;
+        f_bucket << i << ","
+                 << bucket[i].lifetime / bucket[i].count << ","
+                 << bucket[i].miss / bucket[i].count << ","
+                 << bucket[i].access / bucket[i].count << ","
+                 << bucket[i].density / bucket[i].count << ","
+                 << bucket[i].memratio / bucket[i].count << "\n";
     }
 }
+
 #include <fstream>
-
-// 新增一个函数：导出对象 size, access_count, lifetime
-void export_object_stats_for_plot(const std::unordered_map<uint64_t, ObjectInfo>& history_table,
-                                  const std::string& filename,
-                                  uint64_t current_time)
-{
-    std::ofstream fout(filename);
-    if (!fout.is_open()) return;
-
-    // CSV header
-    fout << "ID,SIZE,ACCESS_COUNT,LIFETIME\n";
-
-    for (const auto& [id, obj] : history_table) {
-        if(obj.alive) continue;
-
-        uint64_t access_count = obj.hit_count_l1 + obj.miss_count_l1;
-        uint64_t lifetime = obj.alive ? 0 : (obj.free_time - obj.alloc_time).count();
-
-        fout << id << ","
-             << obj.size << ","
-             << access_count << ","
-             << lifetime << "\n";
-    }
-    fout.close();
-}
-
 void champsim::plain_printer::print(champsim::phase_stats& stats)
 {
   auto lines = format(stats);
@@ -349,8 +372,6 @@ std::vector<std::string> champsim::plain_printer::format(champsim::phase_stats& 
     clock(),
     total_instr
   );
-
-  // export_object_stats_for_plot(history_table, "object_stats.csv", clock());
 
   return lines;
 }

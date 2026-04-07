@@ -1,3 +1,5 @@
+
+// test.cpp
 #include <iostream>
 #include <vector>
 #include <cstdlib>
@@ -15,7 +17,6 @@ struct Obj {
 int main() {
     cout << "Program start\n";
 
-    // 不同大小（单位：int）
     vector<size_t> sizes = {
         16,     // 64B
         64,     // 256B
@@ -25,6 +26,13 @@ int main() {
         8192,   // 32KB
         16384   // 64KB
     };
+
+    // vector<size_t> sizes = {
+    //     10,     // 64B
+    //     100,     // 256B
+    //     1000,    // 1KB
+    //     10000,   // 4KB
+    // };
 
     vector<Obj> objects;
 
@@ -66,51 +74,50 @@ int main() {
          << total_bytes
          << "\n";
 
-    // 确保 < 1MB
-    if (total_bytes >= 1024 * 1024) {
-        cout << "WARNING: exceed 1MB\n";
-    }
+    cout << "vector size: " << objects.size() * sizeof(Obj) << endl;
 
-    cout << "\n--- Sequential write ---\n";
+    // cout << "\n--- Sequential write ---\n";
+    // for (auto& obj : objects) {
+    //     for (size_t i = 0; i < obj.size; i++) {
+    //         obj.ptr[i] = i;
+    //     }
+    // }
 
-    // -------------------------
-    // 顺序访问（store）
-    // -------------------------
-    for (auto& obj : objects) {
-        for (size_t i = 0; i < obj.size; i++) {
-            obj.ptr[i] = i;
-        }
-    }
-
-    cout << "\n--- Sequential read ---\n";
-
-    // -------------------------
-    // 顺序访问（load）
-    // -------------------------
-    long long sum = 0;
-
+    // cout << "\n--- Sequential read ---\n";
+    // long long sum = 0;
     // for (auto& obj : objects) {
     //     for (size_t i = 0; i < obj.size; i++) {
     //         sum += obj.ptr[i];
     //     }
     // }
-
-    cout << "sum=" << sum << "\n";
+    // cout << "sum=" << sum << "\n";
 
     cout << "\n--- Random access ---\n";
 
     // -------------------------
     // 随机访问（更像真实 workload）
     // -------------------------
-    std::mt19937 rng(0);
+    int total = 0;
+    for(auto o: objects) {
+        total += o.size;
+    }
+    auto count_oid = [&](int seed) {
+        seed = seed % total;
+        int r = 0;
+        for(auto o: objects) {
+            if(seed <= r + o.size) return o.id;
+            r += o.size;
+        }
+        return 0;
+    };
 
     for (int round = 0; round < 10000; round++) {
 
-        int obj_id = rng() % objects.size();
+        int obj_id = count_oid(rand());
 
         Obj& obj = objects[obj_id];
 
-        size_t index = rng() % obj.size;
+        size_t index = rand() % obj.size;
 
         obj.ptr[index]++;
 
