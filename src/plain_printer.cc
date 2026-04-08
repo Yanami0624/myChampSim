@@ -207,7 +207,7 @@ void print_object_stats(
         if (!obj.alive) {
             total_access += obj.hit_count_l1 + obj.miss_count_l1;
             total_miss += obj.miss_count_l1 + obj.miss_count_l2;
-            total_latency += obj.total_miss_latency_l1 + obj.total_miss_latency_l2;
+            total_latency += obj.total_miss_latency;
         }
     }
 
@@ -251,12 +251,13 @@ void print_object_stats(
         uint64_t access = obj->hit_count_l1 + obj->miss_count_l1;
         uint64_t lifetime = (obj->free_time - obj->alloc_time).count();
         uint64_t obj_total_miss = obj->miss_count_l1 + obj->miss_count_l2;
-        uint64_t obj_total_latency = obj->total_miss_latency_l1 + obj->total_miss_latency_l2;
+        uint64_t obj_total_latency = obj->total_miss_latency;
 
         double access_ratio = total_access ? 100.0 * access / total_access : 0.0;
         double density = obj->size ? (double)access / (obj->size / 1024.0) : 0.0;
         double mpki = total_instr ? 1000.0 * obj_total_miss / total_instr : 0.0;
-        double lat = obj_total_miss ? (double)obj_total_latency / obj_total_miss : 0.0;
+        double lat = obj_total_miss ? (double)obj_total_latency / obj->latency_event_count : 0.0;
+        // lat = obj_total_latency;
         double mr = access ? (double)obj_total_miss / access : 0.0;
         double peak_mem_ratio = peak_live_bytes ? 100.0 * obj->size / peak_live_bytes : 0.0;
 

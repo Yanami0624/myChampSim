@@ -50,9 +50,11 @@ struct input_instr {
   unsigned char is_malloc; // 0 none, 1 malloc, 2 free
 };
 
-const unsigned char INSTR_NORMAL = 0;
-const unsigned char INSTR_MALLOC = 1;
-const unsigned char INSTR_FREE   = 2;
+const unsigned char INSTR_NORMAL  = 0;
+const unsigned char INSTR_MALLOC  = 1;
+const unsigned char INSTR_FREE    = 2;
+const unsigned char INSTR_REALLOC = 3;
+const unsigned char INSTR_CALLOC  = 4;
 
 struct cloudsuite_instr {
   // instruction pointer or PC (Program Counter)

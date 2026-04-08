@@ -206,6 +206,7 @@ void O3_CPU::initialize_instruction()
             handle_free_event(instr);
             break;
           default:
+            handle_malloc_event(instr);
             ;
         }
 

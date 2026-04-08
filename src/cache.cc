@@ -252,13 +252,13 @@ bool CACHE::handle_fill(const mshr_type& fill_mshr)
 
         auto* obj = find_object(addr);
 
-        if (obj)
-        {
-            if (NAME.find("L1") != std::string::npos)
-                obj->total_miss_latency_l1 += latency;
-
-            else if (NAME.find("L2") != std::string::npos)
-                obj->total_miss_latency_l2 += latency;
+        if (obj)  {
+          obj->total_miss_latency += latency;
+          obj->latency_event_count++;
+          // if(obj->object_id == 9) {
+          //   static int cnt = 0;
+          //   printf("%d %d\n", latency, cnt++);
+          // }
         }
       }
     }
