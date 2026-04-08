@@ -144,6 +144,40 @@ void O3_CPU::handle_malloc_event(const ooo_model_instr& instr)
     peak_live_bytes = max(peak_live_bytes, current_live_bytes);
 }
 
+void O3_CPU::handle_realloc_event(const ooo_model_instr& instr)
+{
+    uint64_t size = instr.source_memory[0].to<uint64_t>();
+    uint64_t addr = instr.destination_memory[0].to<uint64_t>();
+    uint64_t oldptr = instr.source_memory[1].to<uint64_t>();
+    if(addr == 0) return;
+
+    auto it = live_table.find(oldptr);
+    if(it == live_table.end()) return;
+    {
+      auto ptr = it->second;
+      // printf("%ld, %ld, %ld\n", ptr->base_addr, addr, ptr->base_addr + ptr->size);
+
+      ObjectInfo* obj = it->second;
+      obj->alive = false;
+      obj->free_time = current_time;
+      live_table.erase(it);
+      current_live_bytes -= obj->size;
+    }
+
+    ObjectInfo obj;
+    obj.object_id = global_object_id++;
+    obj.base_addr = addr;
+    obj.size = size;
+    obj.alloc_time = current_time;
+    obj.alive = true;
+
+    history_table[obj.object_id] = obj;
+    live_table[addr] = &history_table[obj.object_id];
+
+    current_live_bytes += obj.size;
+    peak_live_bytes = max(peak_live_bytes, current_live_bytes);
+}
+
 void O3_CPU::handle_free_event(const ooo_model_instr& instr)
 {
     // uint64_t addr = instr.addr;
@@ -205,8 +239,12 @@ void O3_CPU::initialize_instruction()
           case INSTR_FREE:
             handle_free_event(instr);
             break;
-          default:
+          case INSTR_CALLOC:
             handle_malloc_event(instr);
+            break;
+          case INSTR_REALLOC:
+            handle_realloc_event(instr);
+          default:
             ;
         }
 

@@ -108,14 +108,15 @@ void WriteToSet(T* begin, T* end, UINT64 r)
 }
 
 #include <iostream>
-void WriteEvent(unsigned char type, uint64_t addr, uint64_t size, uint32_t tid) {
+void WriteEvent(unsigned char type, uint64_t addr, uint64_t arg0, uint64_t arg1, uint32_t tid) {
     trace_instr_format_t ev;
     memset(&ev, 0, sizeof(ev));
 
     ev.is_malloc = type;
 
     ev.destination_memory[0] = addr;
-    ev.source_memory[0] = size;
+    ev.source_memory[0] = arg0;
+    ev.source_memory[1] = arg1;
 
     // 如果需要线程ID，可放入 source_memory[1] 或某个寄存器数组
     // ev.source_memory[1] = tid;
@@ -125,19 +126,69 @@ void WriteEvent(unsigned char type, uint64_t addr, uint64_t size, uint32_t tid) 
 
 uint64_t tls_malloc_size = 0;
 
+uint64_t tls_calloc_nmemb = 0;
+uint64_t tls_calloc_size  = 0;
+
+uint64_t tls_realloc_old_ptr = 0;
+uint64_t tls_realloc_size    = 0;
+
 void MallocEntry(THREADID tid, uint64_t size) {
     tls_malloc_size = size;
 }
-
 void MallocExit(THREADID tid, uint64_t ret_val) {
     if (ret_val != 0) {
-        WriteEvent(INSTR_MALLOC, ret_val, tls_malloc_size, tid);
+        WriteEvent(INSTR_MALLOC, ret_val, tls_malloc_size, 0, tid);
+    }
+}
+
+/* ================= calloc ================= */
+void CallocEntry(THREADID tid, uint64_t nmemb, uint64_t size) {
+    tls_calloc_nmemb = nmemb;
+    tls_calloc_size  = size;
+}
+void CallocExit(THREADID tid, uint64_t ret_val) {
+    if (ret_val != 0)
+    {
+        uint64_t total_size = tls_calloc_nmemb * tls_calloc_size;
+
+        WriteEvent(
+            INSTR_CALLOC,
+            ret_val,
+            total_size,
+            0,
+            tid
+        );
+    }
+}
+
+/* ================= realloc ================= */
+void ReallocEntry(
+    THREADID tid,
+    uint64_t old_ptr,
+    uint64_t size) 
+{
+    tls_realloc_old_ptr = old_ptr;
+    tls_realloc_size    = size;
+}
+void ReallocExit(
+    THREADID tid,
+    uint64_t new_ptr)
+{
+    if (new_ptr != 0)
+    {
+        WriteEvent(
+            INSTR_REALLOC,
+            new_ptr,
+            tls_realloc_size,
+            tls_realloc_old_ptr,
+            tid
+        );
     }
 }
 
 void FreeEntry(THREADID tid, uint64_t ptr) {
     if (ptr != 0) {
-        WriteEvent(INSTR_FREE, ptr, 0, tid);  // free 大小设为0
+        WriteEvent(INSTR_FREE, ptr, 0, 0, tid);  // free 大小设为0
     }
 }
 
@@ -147,28 +198,98 @@ VOID ImageLoad(IMG img, VOID* v)
     RTN mallocRtn = RTN_FindByName(img, "malloc");
     if (RTN_Valid(mallocRtn)) {
         RTN_Open(mallocRtn);
-        // malloc(size)
-        RTN_InsertCall(mallocRtn, IPOINT_BEFORE, (AFUNPTR)MallocEntry,
-                       IARG_THREAD_ID,
-                       IARG_FUNCARG_ENTRYPOINT_VALUE, 0, // size
-                       IARG_END);        
-        // 返回值（分配地址）
-        RTN_InsertCall(mallocRtn, IPOINT_AFTER, (AFUNPTR)MallocExit,
-                       IARG_THREAD_ID,
-                       IARG_FUNCRET_EXITPOINT_VALUE,     // ret ptr
-                       IARG_END);
+
+        RTN_InsertCall(
+            mallocRtn,
+            IPOINT_BEFORE,
+            (AFUNPTR)MallocEntry,
+            IARG_THREAD_ID,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 0,
+            IARG_END);
+
+        RTN_InsertCall(
+            mallocRtn,
+            IPOINT_AFTER,
+            (AFUNPTR)MallocExit,
+            IARG_THREAD_ID,
+            IARG_FUNCRET_EXITPOINT_VALUE,
+            IARG_END);
+
         RTN_Close(mallocRtn);
     }
+
     // ===== hook free =====
     RTN freeRtn = RTN_FindByName(img, "free");
     if (RTN_Valid(freeRtn)) {
         RTN_Open(freeRtn);
-        // free(ptr)
-        RTN_InsertCall(freeRtn, IPOINT_BEFORE, (AFUNPTR)FreeEntry,
-                       IARG_THREAD_ID,
-                       IARG_FUNCARG_ENTRYPOINT_VALUE, 0, // ptr
-                       IARG_END);
+
+        RTN_InsertCall(
+            freeRtn,
+            IPOINT_BEFORE,
+            (AFUNPTR)FreeEntry,
+            IARG_THREAD_ID,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 0,
+            IARG_END);
+
         RTN_Close(freeRtn);
+    }
+
+    /* ===================================================== */
+    /* =================== calloc =========================== */
+    /* ===================================================== */
+
+    RTN callocRtn = RTN_FindByName(img, "calloc");
+    if (RTN_Valid(callocRtn)) {
+
+        RTN_Open(callocRtn);
+
+        RTN_InsertCall(
+            callocRtn,
+            IPOINT_BEFORE,
+            (AFUNPTR)CallocEntry,
+            IARG_THREAD_ID,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 0, // nmemb
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 1, // size
+            IARG_END);
+
+        RTN_InsertCall(
+            callocRtn,
+            IPOINT_AFTER,
+            (AFUNPTR)CallocExit,
+            IARG_THREAD_ID,
+            IARG_FUNCRET_EXITPOINT_VALUE,
+            IARG_END);
+
+        RTN_Close(callocRtn);
+    }
+
+    /* ===================================================== */
+    /* =================== realloc ========================== */
+    /* ===================================================== */
+
+    RTN reallocRtn = RTN_FindByName(img, "realloc");
+    if (RTN_Valid(reallocRtn)) {
+
+        RTN_Open(reallocRtn);
+
+        RTN_InsertCall(
+            reallocRtn,
+            IPOINT_BEFORE,
+            (AFUNPTR)ReallocEntry,
+            IARG_THREAD_ID,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 0, // old ptr
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 1, // size
+            IARG_END);
+
+        RTN_InsertCall(
+            reallocRtn,
+            IPOINT_AFTER,
+            (AFUNPTR)ReallocExit,
+            IARG_THREAD_ID,
+            IARG_FUNCRET_EXITPOINT_VALUE,
+            IARG_END);
+
+        RTN_Close(reallocRtn);
     }
 }
 

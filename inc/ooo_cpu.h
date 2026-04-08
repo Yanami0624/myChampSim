@@ -182,6 +182,7 @@ public:
 
   void handle_malloc_event(const ooo_model_instr& instr);
   void handle_free_event(const ooo_model_instr& instr);
+  void handle_realloc_event(const ooo_model_instr& instr);
 
   [[nodiscard]] auto roi_instr() const { return roi_stats.instrs(); }
   [[nodiscard]] auto roi_cycle() const { return roi_stats.cycles(); }
