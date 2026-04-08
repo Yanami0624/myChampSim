@@ -186,18 +186,19 @@ void print_object_stats(
 {
     lines.emplace_back("");
     lines.emplace_back("OBJECT STATISTICS (sorted by size)");
-    lines.emplace_back("----------------------------------------------------------------------------------------------------------------------------------------------");
+    lines.emplace_back("-----------------------------------------------------------------------------------------------------------------------------------------------------------------");
 
+    // 表头增加 L1_MR% 和 L2_MR%
     std::string header = fmt::format(
         "{:<8} {:<10} {:<10} {:<11} {:<8} {:<12} "
         "{:<8} {:<8} {:<8} {:<8} "
-        "{:<8} {:<8} {:<8} {:<4}",
+        "{:<8} {:<8} {:<8} {:<8} {:<4}",
         "ID","SIZE","LIFE","ACCESS","ACC%","DPKB",
         "L1_ACC","L1_MISS","L2_ACC","L2_MISS",
-        "MPKI","LAT","MR","PEAK_MEMRATIO%"
+        "MPKI","LAT","L1_MR%","L2_MR%","PEAK_MEMRATIO%"
     );
     lines.push_back(header);
-    lines.emplace_back("----------------------------------------------------------------------------------------------------------------------------------------------");
+    lines.emplace_back("-----------------------------------------------------------------------------------------------------------------------------------------------------------------");
 
     uint64_t total_access = 0;
     uint64_t total_miss = 0;
@@ -223,18 +224,20 @@ void print_object_stats(
     });
 
     // ---------------- CSV FILES ----------------
-    
     std::filesystem::create_directories("csvs");
     std::ofstream f_lifetime("csvs/size_vs_lifetime.csv");
     std::ofstream f_miss("csvs/size_vs_miss.csv");
     std::ofstream f_density("csvs/size_vs_density.csv");
-    std::ofstream f_missrate("csvs/size_vs_missrate.csv");
+    // 分开两个 Miss Rate CSV
+    std::ofstream f_l1_missrate("csvs/size_vs_l1_missrate.csv");
+    std::ofstream f_l2_missrate("csvs/size_vs_l2_missrate.csv");
     std::ofstream f_memratio("csvs/size_vs_memratio.csv");
 
     f_lifetime << "size,lifetime\n";
     f_miss << "size,miss\n";
     f_density << "size,density\n";
-    f_missrate << "size,miss_rate\n";
+    f_l1_missrate << "size,l1_miss_rate\n";
+    f_l2_missrate << "size,l2_miss_rate\n";
     f_memratio << "size,mem_ratio\n";
 
     struct BucketStat {
@@ -244,11 +247,18 @@ void print_object_stats(
         double access = 0;
         double density = 0;
         double memratio = 0;
+        double l1_mr = 0;
+        double l2_mr = 0;
     };
     BucketStat bucket[6];
 
     for (const auto* obj : objs) {
-        uint64_t access = obj->hit_count_l1 + obj->miss_count_l1;
+        // L1 访问总数 = L1 命中 + L1 缺失
+        uint64_t l1_access = obj->hit_count_l1 + obj->miss_count_l1;
+        // L2 访问总数 = L2 命中 + L2 缺失（只有 L1 Miss 才会访问 L2）
+        uint64_t l2_access = obj->hit_count_l2 + obj->miss_count_l2;
+        uint64_t access = l1_access;
+
         uint64_t lifetime = (obj->free_time - obj->alloc_time).count();
         uint64_t obj_total_miss = obj->miss_count_l1 + obj->miss_count_l2;
         uint64_t obj_total_latency = obj->total_miss_latency;
@@ -257,19 +267,24 @@ void print_object_stats(
         double density = obj->size ? (double)access / (obj->size / 1024.0) : 0.0;
         double mpki = total_instr ? 1000.0 * obj_total_miss / total_instr : 0.0;
         double lat = obj_total_miss ? (double)obj_total_latency / obj->latency_event_count : 0.0;
-        // lat = obj_total_latency;
-        double mr = access ? (double)obj_total_miss / access : 0.0;
+
+        // ===================== 核心修改：分开 L1 / L2 Miss Rate =====================
+        // L1 Miss Rate = L1 Miss / L1 总访问
+        double l1_mr = l1_access ? (double)obj->miss_count_l1 / l1_access : 0.0;
+        // L2 Miss Rate = L2 Miss / L2 总访问
+        double l2_mr = l2_access ? (double)obj->miss_count_l2 / l2_access : 0.0;
+
         double peak_mem_ratio = peak_live_bytes ? 100.0 * obj->size / peak_live_bytes : 0.0;
 
-        // -------- console table --------
+        // -------- console table -------- 输出两个命中率
         std::string row = fmt::format(
             "{:<8x} {:<10} {:<10} {:<10} {:<7.2f}%  {:<12.2f} "
             "{:<8} {:<8} {:<8} {:<8} "
-            "{:<8.2f} {:<8.2f} {:<7.2f}% {:<7.2f}%",
+            "{:<8.2f} {:<8.2f} {:<7.2f}% {:<7.2f}% {:<7.2f}%",
             obj->object_id, obj->size, lifetime, access, access_ratio, density,
-            obj->hit_count_l1 + obj->miss_count_l1, obj->miss_count_l1,
-            obj->hit_count_l2 + obj->miss_count_l2, obj->miss_count_l2,
-            mpki, lat, mr * 100.0, peak_mem_ratio
+            l1_access, obj->miss_count_l1,
+            l2_access, obj->miss_count_l2,
+            mpki, lat, l1_mr * 100.0, l2_mr * 100.0, peak_mem_ratio
         );
         lines.push_back(row);
 
@@ -277,7 +292,8 @@ void print_object_stats(
         f_lifetime << obj->size << "," << lifetime << "\n";
         f_miss << obj->size << "," << obj_total_miss << "\n";
         f_density << obj->size << "," << density << "\n";
-        f_missrate << obj->size << "," << mr << "\n";
+        f_l1_missrate << obj->size << "," << l1_mr << "\n";
+        f_l2_missrate << obj->size << "," << l2_mr << "\n";
         f_memratio << obj->size << "," << peak_mem_ratio << "\n";
 
         // -------- bucket --------
@@ -288,11 +304,13 @@ void print_object_stats(
         bucket[b].access += access;
         bucket[b].density += density;
         bucket[b].memratio += peak_mem_ratio;
+        bucket[b].l1_mr += l1_mr * 100.0;
+        bucket[b].l2_mr += l2_mr * 100.0;
     }
 
     // ---------------- bucket csv ----------------
     std::ofstream f_bucket("csvs/bucket_stats.csv");
-    f_bucket << "bucket,avg_lifetime,avg_miss,avg_access,avg_density,avg_memratio\n";
+    f_bucket << "bucket,avg_lifetime,avg_miss,avg_access,avg_density,avg_memratio,avg_l1_mr_pct,avg_l2_mr_pct\n";
 
     for (int i = 0; i < 6; i++) {
         if (bucket[i].count == 0) continue;
@@ -301,10 +319,11 @@ void print_object_stats(
                  << bucket[i].miss / bucket[i].count << ","
                  << bucket[i].access / bucket[i].count << ","
                  << bucket[i].density / bucket[i].count << ","
-                 << bucket[i].memratio / bucket[i].count << "\n";
+                 << bucket[i].memratio / bucket[i].count << ","
+                 << bucket[i].l1_mr / bucket[i].count << ","
+                 << bucket[i].l2_mr / bucket[i].count << "\n";
     }
 }
-
 #include <fstream>
 void champsim::plain_printer::print(champsim::phase_stats& stats)
 {
