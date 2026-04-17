@@ -3,13 +3,13 @@
 #!/bin/bash
 
 # ================= 配置区（只改这里） =================
-CPP_FILE="$HOME/ChampSim/mytests/test.cpp"   # 你的 cpp 程序（改这里）
-CHAMPSIM_TRACER_DIR="$HOME/ChampSim/tracer/pin"  # champsim_tracer 所在目录
+CHAMPSIM_DIR="$HOME/myChampSim"
+CPP_FILE="$CHAMPSIM_DIR/mytests/test.cpp"   # 你的 cpp 程序（改这里）
+CHAMPSIM_TRACER_DIR="$CHAMPSIM_DIR/tracer/pin"  # champsim_tracer 所在目录
 # ====================================================
 
 # ===== 固定路径（不用改）=====
 PIN_ROOT="$HOME/pin-3.22-98547-g7a303a835-gcc-linux"
-CHAMPSIM_DIR="$HOME/ChampSim"
 
 BIN_FILE="$HOME/mytests/bin/target"
 TRACER="$CHAMPSIM_TRACER_DIR/obj-intel64/champsim_tracer.so"
@@ -18,7 +18,7 @@ CHAMPSIM_BIN="$CHAMPSIM_DIR/bin/champsim"
 
 # 参数
 SKIP_INS=0
-TRACE_NUM_INS=1000000
+TRACE_NUM_INS=1000000000
 
 # ================= 自动准备 =================
 mkdir -p "$(dirname $BIN_FILE)"
@@ -29,7 +29,7 @@ export PIN_ROOT
 # ================= 0️⃣ 编译 champsim_tracer =================
 echo "=== [0/3] Compiling champsim_tracer ==="
 pushd "$CHAMPSIM_TRACER_DIR" > /dev/null
-make clean
+#make clean
 make -j$(nproc)
 if [ $? -ne 0 ]; then
     echo "❌ compile failed"
@@ -63,6 +63,6 @@ echo "✔ Trace generated: $TRACE_FILE"
 
 # ================= 3️⃣ 用 ChampSim 分析 =================
 echo "=== [3/3] Running ChampSim ==="
-$CHAMPSIM_BIN "$TRACE_FILE"
+$CHAMPSIM_BIN "$TRACE_FILE" --hide-heartbeat
 
 echo "✅ Done!"
