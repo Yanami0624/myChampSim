@@ -52,9 +52,9 @@ struct input_instr {
 
 const unsigned char INSTR_NORMAL  = 0;
 const unsigned char INSTR_MALLOC  = 1;
-const unsigned char INSTR_FREE    = 4;
+const unsigned char INSTR_FREE    = 2;
 const unsigned char INSTR_REALLOC = 3;
-const unsigned char INSTR_CALLOC  = 2;
+const unsigned char INSTR_CALLOC  = 4;
 
 struct cloudsuite_instr {
   // instruction pointer or PC (Program Counter)
