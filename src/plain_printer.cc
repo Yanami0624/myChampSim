@@ -223,35 +223,6 @@ void print_object_stats(
         return a->size > b->size;
     });
 
-    // ---------------- CSV FILES ----------------
-    std::filesystem::create_directories("csvs");
-    std::ofstream f_lifetime("csvs/size_vs_lifetime.csv");
-    std::ofstream f_miss("csvs/size_vs_miss.csv");
-    std::ofstream f_density("csvs/size_vs_density.csv");
-    // 分开两个 Miss Rate CSV
-    std::ofstream f_l1_missrate("csvs/size_vs_l1_missrate.csv");
-    std::ofstream f_l2_missrate("csvs/size_vs_l2_missrate.csv");
-    std::ofstream f_memratio("csvs/size_vs_memratio.csv");
-
-    f_lifetime << "size,lifetime\n";
-    f_miss << "size,miss\n";
-    f_density << "size,density\n";
-    f_l1_missrate << "size,l1_miss_rate\n";
-    f_l2_missrate << "size,l2_miss_rate\n";
-    f_memratio << "size,mem_ratio\n";
-
-    struct BucketStat {
-        uint64_t count = 0;
-        double lifetime = 0;
-        double miss = 0;
-        double access = 0;
-        double density = 0;
-        double memratio = 0;
-        double l1_mr = 0;
-        double l2_mr = 0;
-    };
-    BucketStat bucket[6];
-
     for (const auto* obj : objs) {
         // L1 访问总数 = L1 命中 + L1 缺失
         uint64_t l1_access = obj->hit_count_l1 + obj->miss_count_l1;
@@ -287,42 +258,7 @@ void print_object_stats(
             mpki, lat, l1_mr * 100.0, l2_mr * 100.0, peak_mem_ratio
         );
         lines.push_back(row);
-
-        // -------- CSV output --------
-        f_lifetime << obj->size << "," << lifetime << "\n";
-        f_miss << obj->size << "," << obj_total_miss << "\n";
-        f_density << obj->size << "," << density << "\n";
-        f_l1_missrate << obj->size << "," << l1_mr << "\n";
-        f_l2_missrate << obj->size << "," << l2_mr << "\n";
-        f_memratio << obj->size << "," << peak_mem_ratio << "\n";
-
-        // -------- bucket --------
-        int b = bucket_of(obj->size);
-        bucket[b].count++;
-        bucket[b].lifetime += lifetime;
-        bucket[b].miss += obj_total_miss;
-        bucket[b].access += access;
-        bucket[b].density += density;
-        bucket[b].memratio += peak_mem_ratio;
-        bucket[b].l1_mr += l1_mr * 100.0;
-        bucket[b].l2_mr += l2_mr * 100.0;
-    }
-
-    // ---------------- bucket csv ----------------
-    std::ofstream f_bucket("csvs/bucket_stats.csv");
-    f_bucket << "bucket,avg_lifetime,avg_miss,avg_access,avg_density,avg_memratio,avg_l1_mr_pct,avg_l2_mr_pct\n";
-
-    for (int i = 0; i < 6; i++) {
-        if (bucket[i].count == 0) continue;
-        f_bucket << i << ","
-                 << bucket[i].lifetime / bucket[i].count << ","
-                 << bucket[i].miss / bucket[i].count << ","
-                 << bucket[i].access / bucket[i].count << ","
-                 << bucket[i].density / bucket[i].count << ","
-                 << bucket[i].memratio / bucket[i].count << ","
-                 << bucket[i].l1_mr / bucket[i].count << ","
-                 << bucket[i].l2_mr / bucket[i].count << "\n";
-    }
+      }
 }
 #include <fstream>
 void champsim::plain_printer::print(champsim::phase_stats& stats)

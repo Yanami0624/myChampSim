@@ -29,7 +29,7 @@ export PIN_ROOT
 # ================= 0️⃣ 编译 champsim_tracer =================
 echo "=== [0/3] Compiling champsim_tracer ==="
 pushd "$CHAMPSIM_TRACER_DIR" > /dev/null
-#make clean
+# make clean
 make -j$(nproc)
 if [ $? -ne 0 ]; then
     echo "❌ compile failed"

@@ -16,22 +16,21 @@ struct Obj {
 int main() {
     cout << "Program start\n";
 
-    vector<size_t> sizes = {
-        16,     // 64B
-        64,     // 256B
-        256,    // 1KB
-        1024,   // 4KB
-        4096,   // 16KB
-        8192,   // 32KB
-        16384   // 64KB
-    };
-
     // vector<size_t> sizes = {
-    //     10,     // 64B
-    //     100,     // 256B
-    //     1000,    // 1KB
-    //     10000,   // 4KB
+    //     16,     // 64B
+    //     64,     // 256B
+    //     256,    // 1KB
+    //     1024,   // 4KB
+    //     4096,   // 16KB
     // };
+
+    vector<size_t> sizes = {
+        10,     // 64B
+        100,     // 256B
+        1000,    // 1KB
+        10000,   // 4KB
+        160000,   // 4KB
+    };
 
     vector<Obj> objects;
 
@@ -50,7 +49,7 @@ int main() {
             return 1;
         }
 
-        memset(p, 0, sizeof(int) * n);
+        // memset(p, 0, sizeof(int) * n);
 
         Obj obj;
         obj.id = i;
@@ -76,11 +75,11 @@ int main() {
     cout << "vector size: " << objects.size() * sizeof(Obj) << endl;
 
     cout << "\n--- Sequential write ---\n";
-    for (auto& obj : objects) {
-        for (size_t i = 0; i < obj.size; i++) {
-            obj.ptr[i] = i;
-        }
-    }
+    // for (auto& obj : objects) {
+    //     for (size_t i = 0; i < obj.size; i++) {
+    //         // obj.ptr[i] = i;
+    //     }
+    // }
 
     // cout << "\n--- Sequential read ---\n";
     // long long sum = 0;
@@ -92,10 +91,6 @@ int main() {
     // cout << "sum=" << sum << "\n";
 
     cout << "\n--- Random access ---\n";
-
-    // -------------------------
-    // 随机访问（更像真实 workload）
-    // -------------------------
     int total = 0;
     for(auto o: objects) {
         total += o.size;
@@ -110,22 +105,16 @@ int main() {
         return 0;
     };
 
-    for (int round = 0; round < 1000; round++) {
-
+    volatile long long sink = 0;
+    for (int round = 0; round < 100000; round++) {
         int obj_id = count_oid(rand());
-
         Obj& obj = objects[obj_id];
-
         size_t index = rand() % obj.size;
-
-        // obj.ptr[index]++;
+        sink += obj.ptr[index];
     }
 
     cout << "Random access finished\n";
 
-    // -------------------------
-    // free
-    // -------------------------
     for (auto& obj : objects) {
         cout << "free object "
              << obj.id
@@ -135,6 +124,7 @@ int main() {
         free(obj.ptr);
     }
 
+    printf("sum: %lld\n", sink);
     cout << "Program end\n";
 
     return 0;

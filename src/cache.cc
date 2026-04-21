@@ -1,19 +1,5 @@
-/*
- *    Copyright 2023 The ChampSim Contributors
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 
+// cache.cc
 #include "cache.h"
 
 #include <algorithm>
@@ -284,10 +270,10 @@ inline void match(const std::string& name,
         if (is_hit) obj->hit_count_l2++;
         else obj->miss_count_l2++;
     }
-    else if (name == "LLC") {
-        if (is_hit) obj->hit_count_llc++;
-        else obj->miss_count_llc++;
-    }
+    // else if (name.find("LLC") != std::string::npos) {
+    //     if (is_hit) obj->hit_count_llc++;
+    //     else obj->miss_count_llc++;
+    // }
 }
 bool CACHE::try_hit(const tag_lookup_type& handle_pkt)
 {
@@ -322,20 +308,8 @@ bool CACHE::try_hit(const tag_lookup_type& handle_pkt)
                                 // if(cnt++ % 100000 == 0) std::cout << NAME << std::endl;
   if (hit) {
     uint64_t addr = handle_pkt.v_address.to<uint64_t>();
-    // static int cnt = 0;
-    // if(0) printf(
-    //   "%s hit: vaddr=%lx paddr=%lx\n",
-    //   NAME.c_str(),
-    //   handle_pkt.v_address.to<uint64_t>(),
-    //   handle_pkt.address.to<uint64_t>()
-    // );
-    // if (NAME == "cpu0_L1D" && (cnt++ % 10000 == 0)) printf("L1D hit: %lx\n", addr);
-    // if (NAME == "cpu0_DTLB" && (cnt++ % 10000 == 0)) printf("DTLB hit: %lx\n", addr);
     auto* obj = find_object(addr);
     if (obj) {
-      // obj->hit_count_l1++;
-      // std::cout << NAME << std::endl;
-      // printf("%s hit obj: %lx\n", NAME.c_str(), addr);
       match(NAME, obj, true);
     }
 
@@ -353,6 +327,12 @@ bool CACHE::try_hit(const tag_lookup_type& handle_pkt)
       ++sim_stats.pf_useful;
       way->prefetch = false;
     }
+  } else {
+    // uint64_t addr = handle_pkt.v_address.to<uint64_t>();
+    // auto* obj = find_object(addr);
+    // if (obj) {
+    //   match(NAME, obj, false);
+    // }
   }
 
   return hit;
@@ -400,6 +380,12 @@ bool CACHE::handle_miss(const tag_lookup_type& handle_pkt)
   auto mshr_entry = std::find_if(std::begin(MSHR), std::end(MSHR), matches_address(handle_pkt.address));
   bool mshr_full = (MSHR.size() == MSHR_SIZE);
 
+  uint64_t addr = handle_pkt.v_address.to<uint64_t>();
+    auto* obj = find_object(addr);
+    if (obj) {
+      match(NAME, obj, false);
+    }
+
   if (mshr_entry != MSHR.end()) // miss already inflight
   {
     if (mshr_entry->type == access_type::PREFETCH && handle_pkt.type != access_type::PREFETCH) {
@@ -407,15 +393,6 @@ bool CACHE::handle_miss(const tag_lookup_type& handle_pkt)
       if (mshr_entry->prefetch_from_this) {
         ++sim_stats.pf_useful;
       }
-    }
-
-    uint64_t addr = handle_pkt.v_address.to<uint64_t>();
-    // static int cnt = 0;
-    // if (NAME == "cpu0_L1D" && (cnt++ % 10000 == 0)) printf("L1D miss: %lx\n", addr);
-    auto* obj = find_object(addr);
-    if (obj) {
-      // obj->miss_count_l1++;
-      match(NAME, obj, false);
     }
 
     // COLLECT STATS
