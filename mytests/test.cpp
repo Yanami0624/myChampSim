@@ -1,11 +1,10 @@
-// test.cpp
-#include <iostream>
-#include <vector>
+#include <cstdio>
 #include <cstdlib>
+#include <cstdint>
 #include <cstring>
 #include <random>
 
-using namespace std;
+static const int NUM_OBJ = 8;
 
 struct Obj {
     int id;
@@ -13,119 +12,117 @@ struct Obj {
     int* ptr;
 };
 
+Obj objects[NUM_OBJ];
+
+size_t sizes[NUM_OBJ] = {
+    10,
+    100,
+    1000,
+    10000,
+    20000,
+    40000,
+    80000,
+    160000
+};
+size_t total_bytes = 0;
+
+// ----------------------------
+// 线性 mapping（避免 vector scan）
+// ----------------------------
+int get_obj_id(size_t x) {
+    x = x % total_bytes;
+    size_t acc = 0;
+    for (int i = 0; i < NUM_OBJ; i++) {
+        if (x < acc + sizes[i]) return i;
+        acc += sizes[i];
+    }
+    return NUM_OBJ - 1;
+}
+
 int main() {
-    cout << "Program start\n";
+    printf("Program start\n");
 
-    // vector<size_t> sizes = {
-    //     16,     // 64B
-    //     64,     // 256B
-    //     256,    // 1KB
-    //     1024,   // 4KB
-    //     4096,   // 16KB
-    // };
+    // ----------------------------
+    // malloc objects（纯净）
+    // ----------------------------
+    for (int i = 0; i < NUM_OBJ; i++) {
+        objects[i].id = i;
+        objects[i].size = sizes[i];
+        objects[i].ptr = (int*)malloc(sizeof(int) * sizes[i]);
 
-    vector<size_t> sizes = {
-        10,     // 64B
-        100,     // 256B
-        1000,    // 1KB
-        10000,   // 4KB
-        160000,   // 4KB
-    };
+        if (!objects[i].ptr) return 1;
 
-    vector<Obj> objects;
+        total_bytes += sizeof(int) * sizes[i];
 
-    size_t total_bytes = 0;
-
-    // -------------------------
-    // malloc 不同大小对象
-    // -------------------------
-    for (int i = 0; i < sizes.size(); i++) {
-        size_t n = sizes[i];
-
-        int* p = (int*) malloc(sizeof(int) * n);
-
-        if (!p) {
-            cerr << "malloc failed\n";
-            return 1;
-        }
-
-        // memset(p, 0, sizeof(int) * n);
-
-        Obj obj;
-        obj.id = i;
-        obj.size = n;
-        obj.ptr = p;
-
-        objects.push_back(obj);
-
-        size_t bytes = sizeof(int) * n;
-        total_bytes += bytes;
-
-        cout << "malloc object "
-             << i
-             << " addr=" << (void*)p
-             << " size=" << bytes
-             << " bytes\n";
+        printf("malloc object %d addr=%p size=%zu bytes\n",
+               i, objects[i].ptr, sizeof(int) * sizes[i]);
     }
 
-    cout << "\nTotal allocated bytes = "
-         << total_bytes
-         << "\n";
+    printf("\nTotal bytes = %zu\n", total_bytes);
 
-    cout << "vector size: " << objects.size() * sizeof(Obj) << endl;
+    // ----------------------------
+    // deterministic RNG（避免 rand noise）
+    // ----------------------------
+    std::mt19937 rng(12345);
+    std::uniform_int_distribution<int> dist(0, 100000000);
 
-    cout << "\n--- Sequential write ---\n";
-    // for (auto& obj : objects) {
-    //     for (size_t i = 0; i < obj.size; i++) {
-    //         // obj.ptr[i] = i;
-    //     }
+    const int ROUND = 10000;
+
+    // printf("\n--- write phase ---\n");
+    // for (int i = 0; i < ROUND; i++) {
+    //     int x = dist(rng) % total_bytes;
+    //     int id = get_obj_id(x);
+
+    //     Obj &o = objects[id];
+    //     size_t idx = dist(rng) % o.size;
+
+    //     o.ptr[idx] = x;
     // }
 
-    // cout << "\n--- Sequential read ---\n";
-    // long long sum = 0;
-    // for (auto& obj : objects) {
-    //     for (size_t i = 0; i < obj.size; i++) {
-    //         sum += obj.ptr[i];
-    //     }
-    // }
-    // cout << "sum=" << sum << "\n";
 
-    cout << "\n--- Random access ---\n";
-    int total = 0;
-    for(auto o: objects) {
-        total += o.size;
-    }
-    auto count_oid = [&](int seed) {
-        seed = seed % total;
-        int r = 0;
-        for(auto o: objects) {
-            if(seed <= r + o.size) return o.id;
-            r += o.size;
+    printf("\n--- WRITE PHASE (dirty cache lines) ---\n");
+
+    // 🔥 关键：让写发生“局部重复”
+    for (int i = 0; i < ROUND; i++) {
+        uint32_t x = dist(rng);
+        int id = get_obj_id(x);
+
+        Obj &o = objects[id];
+
+        // 🔥 核心改动：限制在 cache line 内反复写
+        size_t base = (x % (o.size / 16)) * 16;  // 16-int block
+
+        for (int k = 0; k < 16; k++) {
+            o.ptr[base + k] = x + k;
         }
-        return 0;
-    };
-
-    volatile long long sink = 0;
-    for (int round = 0; round < 100000; round++) {
-        int obj_id = count_oid(rand());
-        Obj& obj = objects[obj_id];
-        size_t index = rand() % obj.size;
-        sink += obj.ptr[index];
     }
 
-    cout << "Random access finished\n";
+    printf("\n--- READ+WRITE MIX PHASE ---\n");
 
-    for (auto& obj : objects) {
-        cout << "free object "
-             << obj.id
-             << " addr=" << (void*)obj.ptr
-             << "\n";
+    printf("\n--- read phase ---\n");
+    long long sink = 0;
 
-        free(obj.ptr);
+    for (int i = 0; i < ROUND; i++) {
+        int x = dist(rng) % total_bytes;
+        int id = get_obj_id(x);
+
+        Obj &o = objects[id];
+        size_t idx = dist(rng) % o.size;
+
+        sink += o.ptr[idx];
     }
 
-    printf("sum: %lld\n", sink);
-    cout << "Program end\n";
+    printf("sink=%lld\n", sink);
 
+    // ----------------------------
+    // free
+    // ----------------------------
+    for (int i = 0; i < NUM_OBJ; i++) {
+        printf("free object %d addr=%p\n",
+               i, objects[i].ptr);
+        free(objects[i].ptr);
+    }
+
+    printf("Program end\n");
     return 0;
 }

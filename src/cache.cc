@@ -24,6 +24,42 @@ extern std::map<uint64_t, ObjectInfo*> live_table; // 当前活跃对象（地�
 extern std::unordered_map<uint64_t, ObjectInfo> history_table; // 所有对象（object_id → object）
 extern ObjectInfo* find_object(uint64_t addr);
 
+
+inline CacheLevel get_cache_level(const std::string& name)
+{
+    if (name.find("L1I") != std::string::npos)
+        return L1I;
+
+    if (name.find("L1D") != std::string::npos)
+        return L1D;
+
+    if (name.find("L2C") != std::string::npos)
+        return L2C;
+    return LLC;
+}
+
+inline AccessType get_access_type(access_type t)
+{
+    return static_cast<AccessType>(
+        champsim::to_underlying(t)
+    );
+}
+
+inline void match(const std::string& name,
+                  ObjectInfo* obj,
+                  access_type type,
+                  bool is_hit)
+{
+    auto level = get_cache_level(name);
+    auto atype = get_access_type(type);
+
+    obj->access[level][atype]++;
+
+    if (!is_hit)
+        obj->miss[level][atype]++;
+}
+
+
 CACHE::CACHE(CACHE&& other)
     : operable(other),
 
@@ -224,6 +260,13 @@ bool CACHE::handle_fill(const mshr_type& fill_mshr)
     }
 
     *way = fill_block(fill_mshr, metadata_thru);
+
+    uint64_t addr = way->v_address.to<uint64_t>();
+    auto* obj = find_object(addr);
+
+    if (obj) {
+      match(NAME, obj, access_type::WRITE, true);
+    }
   }
 
   // COLLECT STATS
@@ -241,10 +284,6 @@ bool CACHE::handle_fill(const mshr_type& fill_mshr)
         if (obj)  {
           obj->total_miss_latency += latency;
           obj->latency_event_count++;
-          // if(obj->object_id == 9) {
-          //   static int cnt = 0;
-          //   printf("%d %d\n", latency, cnt++);
-          // }
         }
       }
     }
@@ -258,23 +297,6 @@ bool CACHE::handle_fill(const mshr_type& fill_mshr)
   return true;
 }
 
-inline void match(const std::string& name,
-                  ObjectInfo* obj,
-                  bool is_hit)
-{
-    if (name.find("L1") != std::string::npos) {
-        if (is_hit) obj->hit_count_l1++;
-        else obj->miss_count_l1++;
-    }
-    else if (name.find("L2") != std::string::npos) {
-        if (is_hit) obj->hit_count_l2++;
-        else obj->miss_count_l2++;
-    }
-    // else if (name.find("LLC") != std::string::npos) {
-    //     if (is_hit) obj->hit_count_llc++;
-    //     else obj->miss_count_llc++;
-    // }
-}
 bool CACHE::try_hit(const tag_lookup_type& handle_pkt)
 {
   // TODO 这里的addr可能不是 object 地址而是 block 地址
@@ -310,8 +332,17 @@ bool CACHE::try_hit(const tag_lookup_type& handle_pkt)
     uint64_t addr = handle_pkt.v_address.to<uint64_t>();
     auto* obj = find_object(addr);
     if (obj) {
-      match(NAME, obj, true);
+      match(NAME, obj, handle_pkt.type, true);
     }
+    // if (handle_pkt.type == access_type::PREFETCH) {
+    // if (!obj) {
+    //     std::cout
+    //         << "PF no object: "
+    //         << std::hex
+    //         << handle_pkt.address.to<uint64_t>()
+    //         << "\n";
+    //   }
+    // }
 
     sim_stats.hits.increment(std::pair{handle_pkt.type, handle_pkt.cpu});
 
@@ -383,7 +414,7 @@ bool CACHE::handle_miss(const tag_lookup_type& handle_pkt)
   uint64_t addr = handle_pkt.v_address.to<uint64_t>();
     auto* obj = find_object(addr);
     if (obj) {
-      match(NAME, obj, false);
+      match(NAME, obj, handle_pkt.type, false);
     }
 
   if (mshr_entry != MSHR.end()) // miss already inflight

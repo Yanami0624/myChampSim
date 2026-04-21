@@ -382,26 +382,41 @@ std::pair<champsim::address, bool> O3_CPU::btb_module_model<Ts...>::impl_btb_pre
 
 #include <unordered_map>
 
+enum CacheLevel {
+      L1I = 0,
+      L1D,
+      L2C,
+      LLC,
+      NUM_CACHE_LEVEL
+    };
+
+    enum AccessType {
+        LOAD = 0,
+        RFO,
+        PREFETCH,
+        WRITE,
+        TRANSLATION,
+        NUM_ACCESS_TYPE
+    };
+
 struct ObjectInfo {
     uint64_t object_id;
 
     uint64_t base_addr;
     uint64_t size;
 
+    uint64_t access[NUM_CACHE_LEVEL][NUM_ACCESS_TYPE] = {};
+    uint64_t miss[NUM_CACHE_LEVEL][NUM_ACCESS_TYPE] = {};
+
     champsim::chrono::clock::time_point alloc_time;
     champsim::chrono::clock::time_point free_time;
     bool alive = true;
 
-    // 后面论文要用的统计
-    uint64_t hit_count_l1 = 0;
-    uint64_t miss_count_l1 = 0;
+    // uint64_t hit_count_l1 = 0;
+    // uint64_t miss_count_l1 = 0;
 
-    uint64_t hit_count_l2 = 0;
-    uint64_t miss_count_l2 = 0;
-
-    // uint64_t access_count_llc = 0;
-    // uint64_t hit_count_llc = 0;
-    // uint64_t miss_count_llc = 0;
+    // uint64_t hit_count_l2 = 0;
+    // uint64_t miss_count_l2 = 0;
 
     uint64_t total_miss_latency = 0;
     uint64_t latency_event_count = 0;

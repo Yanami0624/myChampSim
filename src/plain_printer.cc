@@ -177,90 +177,118 @@ static inline int bucket_of(uint64_t size)
     return 5;
 }
 
-#include <filesystem>
-void print_object_stats(
-    std::vector<std::string>& lines,
-    const std::unordered_map<uint64_t, ObjectInfo>& history_table,
-    uint64_t current_time,
-    uint64_t total_instr)
-{
-    lines.emplace_back("");
+// void print_object_stats(
+//     std::vector<std::string>& lines,
+//     const std::unordered_map<uint64_t, ObjectInfo>& history_table,
+//     uint64_t current_time,
+//     uint64_t total_instr)
+// {
+//     lines.emplace_back("");
+//     lines.emplace_back("OBJECT STATISTICS (sorted by size)");
+//     lines.emplace_back("-----------------------------------------------------------------------------------------------------------------------------------------------------------------");
+
+//     // 表头增加 L1_MR% 和 L2_MR%
+//     std::string header = fmt::format(
+//         "{:<8} {:<10} {:<10} {:<11} {:<8} {:<12} "
+//         "{:<8} {:<8} {:<8} {:<8} "
+//         "{:<8} {:<8} {:<8} {:<8} {:<4}",
+//         "ID","SIZE","LIFE","ACCESS","ACC%","DPKB",
+//         "L1_ACC","L1_MISS","L2_ACC","L2_MISS",
+//         "MPKI","LAT","L1_MR%","L2_MR%","PEAK_MEMRATIO%"
+//     );
+//     lines.push_back(header);
+//     lines.emplace_back("-----------------------------------------------------------------------------------------------------------------------------------------------------------------");
+
+//     uint64_t total_access = 0;
+//     uint64_t total_miss = 0;
+//     uint64_t total_latency = 0;
+
+//     for (const auto& [id, obj] : history_table) {
+//         if (!obj.alive) {
+//             total_access += obj.hit_count_l1 + obj.miss_count_l1;
+//             total_miss += obj.miss_count_l1 + obj.miss_count_l2;
+//             total_latency += obj.total_miss_latency;
+//         }
+//     }
+
+//     std::vector<const ObjectInfo*> objs;
+//     objs.reserve(history_table.size());
+//     for (const auto& [id, obj] : history_table) {
+//         if (!obj.alive)
+//             objs.push_back(&obj);
+//     }
+
+//     std::sort(objs.begin(), objs.end(), [](const ObjectInfo* a, const ObjectInfo* b) {
+//         return a->size > b->size;
+//     });
+
+//     for (const auto* obj : objs) {
+//         // L1 访问总数 = L1 命中 + L1 缺失
+//         uint64_t l1_access = obj->hit_count_l1 + obj->miss_count_l1;
+//         // L2 访问总数 = L2 命中 + L2 缺失（只有 L1 Miss 才会访问 L2）
+//         uint64_t l2_access = obj->hit_count_l2 + obj->miss_count_l2;
+//         uint64_t access = l1_access;
+
+//         uint64_t lifetime = (obj->free_time - obj->alloc_time).count();
+//         uint64_t obj_total_miss = obj->miss_count_l1 + obj->miss_count_l2;
+//         uint64_t obj_total_latency = obj->total_miss_latency;
+
+//         double access_ratio = total_access ? 100.0 * access / total_access : 0.0;
+//         double density = obj->size ? (double)access / (obj->size / 1024.0) : 0.0;
+//         double mpki = total_instr ? 1000.0 * obj_total_miss / total_instr : 0.0;
+//         double lat = obj_total_miss ? (double)obj_total_latency / obj->latency_event_count : 0.0;
+
+//         // ===================== 核心修改：分开 L1 / L2 Miss Rate =====================
+//         // L1 Miss Rate = L1 Miss / L1 总访问
+//         double l1_mr = l1_access ? (double)obj->miss_count_l1 / l1_access : 0.0;
+//         // L2 Miss Rate = L2 Miss / L2 总访问
+//         double l2_mr = l2_access ? (double)obj->miss_count_l2 / l2_access : 0.0;
+
+//         double peak_mem_ratio = peak_live_bytes ? 100.0 * obj->size / peak_live_bytes : 0.0;
+
+//         // -------- console table -------- 输出两个命中率
+//         std::string row = fmt::format(
+//             "{:<8x} {:<10} {:<10} {:<10} {:<7.2f}%  {:<12.2f} "
+//             "{:<8} {:<8} {:<8} {:<8} "
+//             "{:<8.2f} {:<8.2f} {:<7.2f}% {:<7.2f}% {:<7.2f}%",
+//             obj->object_id, obj->size, lifetime, access, access_ratio, density,
+//             l1_access, obj->miss_count_l1,
+//             l2_access, obj->miss_count_l2,
+//             mpki, lat, l1_mr * 100.0, l2_mr * 100.0, peak_mem_ratio
+//         );
+//         lines.push_back(row);
+//       }
+// }
+
+void print_object_stats(std::vector<std::string>& lines,const std::unordered_map<uint64_t,ObjectInfo>& history_table,uint64_t current_time,uint64_t total_instr){
     lines.emplace_back("OBJECT STATISTICS (sorted by size)");
-    lines.emplace_back("-----------------------------------------------------------------------------------------------------------------------------------------------------------------");
-
-    // 表头增加 L1_MR% 和 L2_MR%
-    std::string header = fmt::format(
-        "{:<8} {:<10} {:<10} {:<11} {:<8} {:<12} "
-        "{:<8} {:<8} {:<8} {:<8} "
-        "{:<8} {:<8} {:<8} {:<8} {:<4}",
-        "ID","SIZE","LIFE","ACCESS","ACC%","DPKB",
-        "L1_ACC","L1_MISS","L2_ACC","L2_MISS",
-        "MPKI","LAT","L1_MR%","L2_MR%","PEAK_MEMRATIO%"
-    );
+    lines.emplace_back("--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------");
+    auto header=fmt::format("{:<8} {:<10} {:<10} {:<11} {:<8} {:<12} {:<8} {:<8} {:<8} {:<8} {:<8} {:<8} {:<8} {:<8} {:<8} {:<8} {:<8} {:<8} {:<8} {:<8} {:<8} {:<8} {:<8} {:<8} {:<8}","ID","SIZE","LIFE","ACCESS","ACC%","DPKB","L1_ACC","L1_MISS","L2_ACC","L2_MISS","MPKI","LAT","L1_MR%","L2_MR%","PEAK","L1D_T","L1D_L","L1D_P","L1D_W","L1D_TR","L2_T","L2_L","L2_P","L2_W","L2_TR");
     lines.push_back(header);
-    lines.emplace_back("-----------------------------------------------------------------------------------------------------------------------------------------------------------------");
-
-    uint64_t total_access = 0;
-    uint64_t total_miss = 0;
-    uint64_t total_latency = 0;
-
-    for (const auto& [id, obj] : history_table) {
-        if (!obj.alive) {
-            total_access += obj.hit_count_l1 + obj.miss_count_l1;
-            total_miss += obj.miss_count_l1 + obj.miss_count_l2;
-            total_latency += obj.total_miss_latency;
-        }
-    }
-
+    lines.emplace_back("--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------");
     std::vector<const ObjectInfo*> objs;
-    objs.reserve(history_table.size());
-    for (const auto& [id, obj] : history_table) {
-        if (!obj.alive)
-            objs.push_back(&obj);
-    }
-
-    std::sort(objs.begin(), objs.end(), [](const ObjectInfo* a, const ObjectInfo* b) {
-        return a->size > b->size;
-    });
-
-    for (const auto* obj : objs) {
-        // L1 访问总数 = L1 命中 + L1 缺失
-        uint64_t l1_access = obj->hit_count_l1 + obj->miss_count_l1;
-        // L2 访问总数 = L2 命中 + L2 缺失（只有 L1 Miss 才会访问 L2）
-        uint64_t l2_access = obj->hit_count_l2 + obj->miss_count_l2;
-        uint64_t access = l1_access;
-
-        uint64_t lifetime = (obj->free_time - obj->alloc_time).count();
-        uint64_t obj_total_miss = obj->miss_count_l1 + obj->miss_count_l2;
-        uint64_t obj_total_latency = obj->total_miss_latency;
-
-        double access_ratio = total_access ? 100.0 * access / total_access : 0.0;
-        double density = obj->size ? (double)access / (obj->size / 1024.0) : 0.0;
-        double mpki = total_instr ? 1000.0 * obj_total_miss / total_instr : 0.0;
-        double lat = obj_total_miss ? (double)obj_total_latency / obj->latency_event_count : 0.0;
-
-        // ===================== 核心修改：分开 L1 / L2 Miss Rate =====================
-        // L1 Miss Rate = L1 Miss / L1 总访问
-        double l1_mr = l1_access ? (double)obj->miss_count_l1 / l1_access : 0.0;
-        // L2 Miss Rate = L2 Miss / L2 总访问
-        double l2_mr = l2_access ? (double)obj->miss_count_l2 / l2_access : 0.0;
-
-        double peak_mem_ratio = peak_live_bytes ? 100.0 * obj->size / peak_live_bytes : 0.0;
-
-        // -------- console table -------- 输出两个命中率
-        std::string row = fmt::format(
-            "{:<8x} {:<10} {:<10} {:<10} {:<7.2f}%  {:<12.2f} "
-            "{:<8} {:<8} {:<8} {:<8} "
-            "{:<8.2f} {:<8.2f} {:<7.2f}% {:<7.2f}% {:<7.2f}%",
-            obj->object_id, obj->size, lifetime, access, access_ratio, density,
-            l1_access, obj->miss_count_l1,
-            l2_access, obj->miss_count_l2,
-            mpki, lat, l1_mr * 100.0, l2_mr * 100.0, peak_mem_ratio
-        );
+    for(auto& [id,obj]:history_table)if(!obj.alive)objs.push_back(&obj);
+    std::sort(objs.begin(),objs.end(),[](auto*a,auto*b){return a->size>b->size;});
+    for(const auto*obj:objs){
+        uint64_t l1_access=0,l1_miss=0,l2_access=0,l2_miss=0;
+        for(int t=0;t<NUM_ACCESS_TYPE;t++){l1_access+=obj->access[L1D][t];l1_miss+=obj->miss[L1D][t];l2_access+=obj->access[L2C][t];l2_miss+=obj->miss[L2C][t];}
+        auto T=[&](CacheLevel l){uint64_t s=0;for(int t=0;t<NUM_ACCESS_TYPE;t++)s+=obj->access[l][t];return s;};
+        auto L=[&](CacheLevel l){return obj->access[l][LOAD];};
+        auto P=[&](CacheLevel l){return obj->access[l][PREFETCH];};
+        auto W=[&](CacheLevel l){return obj->access[l][WRITE];};
+        auto R=[&](CacheLevel l){return obj->access[l][TRANSLATION];};
+        uint64_t access=l1_access,lifetime=(obj->free_time-obj->alloc_time).count(),miss=l1_miss+l2_miss;
+        double acc_ratio=0,mpki=0,lat=0,l1mr=0,l2mr=0,peak=0;
+        if(total_instr)mpki=1000.0*miss/total_instr;
+        if(l1_access)l1mr=(double)l1_miss/l1_access;
+        if(l2_access)l2mr=(double)l2_miss/l2_access;
+        if(obj->latency_event_count)lat=(double)obj->total_miss_latency/obj->latency_event_count;
+        if(peak_live_bytes)peak=100.0*obj->size/peak_live_bytes;
+        auto row=fmt::format("{:<8x} {:<10} {:<10} {:<11} {:<7.2f}% {:<12.2f} {:<8} {:<8} {:<8} {:<8} {:<8.2f} {:<8.2f} {:<7.2f}% {:<7.2f}% {:<7.2f}% {:<8} {:<8} {:<8} {:<8} {:<8} {:<8} {:<8} {:<8} {:<8} {:<8}",obj->object_id,obj->size,lifetime,access,acc_ratio,obj->size?(double)access/(obj->size/1024.0):0.0,l1_access,l1_miss,l2_access,l2_miss,mpki,lat,l1mr*100.0,l2mr*100.0,peak,T(L1D),L(L1D),P(L1D),W(L1D),R(L1D),T(L2C),L(L2C),P(L2C),W(L2C),R(L2C));
         lines.push_back(row);
-      }
+    }
 }
-#include <fstream>
+
 void champsim::plain_printer::print(champsim::phase_stats& stats)
 {
   auto lines = format(stats);
