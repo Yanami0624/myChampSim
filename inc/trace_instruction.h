@@ -47,14 +47,14 @@ struct input_instr {
   unsigned long long destination_memory[NUM_INSTR_DESTINATIONS]; // output memory | source_memory[0]--malloc addr
   unsigned long long source_memory[NUM_INSTR_SOURCES];           // input memory | destination_memory[0]--malloc size
 
-  unsigned char is_malloc; // 0 none, 1 malloc, 2 free
+  unsigned char is_malloc;
 };
 
 const unsigned char INSTR_NORMAL  = 0;
 const unsigned char INSTR_MALLOC  = 1;
-const unsigned char INSTR_FREE    = 2;
+const unsigned char INSTR_FREE    = 4;
 const unsigned char INSTR_REALLOC = 3;
-const unsigned char INSTR_CALLOC  = 4;
+const unsigned char INSTR_CALLOC  = 2;
 
 struct cloudsuite_instr {
   // instruction pointer or PC (Program Counter)

@@ -117,10 +117,7 @@ void WriteEvent(unsigned char type, uint64_t addr, uint64_t arg0, uint64_t arg1,
     ev.destination_memory[0] = addr;
     ev.source_memory[0] = arg0;
     ev.source_memory[1] = arg1;
-
-    // 如果需要线程ID，可放入 source_memory[1] 或某个寄存器数组
-    // ev.source_memory[1] = tid;
-
+    
     outfile.write(reinterpret_cast<const char*>(&ev), sizeof(ev));
 }
 

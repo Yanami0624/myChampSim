@@ -236,14 +236,14 @@ void O3_CPU::initialize_instruction()
           case INSTR_MALLOC:
             handle_malloc_event(instr);
             break;
-          case INSTR_FREE:
-            handle_free_event(instr);
-            break;
           case INSTR_CALLOC:
             handle_malloc_event(instr);
             break;
           case INSTR_REALLOC:
             handle_realloc_event(instr);
+          case INSTR_FREE:
+            handle_free_event(instr);
+            break;
           default:
             ;
         }
