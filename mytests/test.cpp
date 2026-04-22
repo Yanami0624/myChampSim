@@ -1,10 +1,9 @@
+// test.cpp
 #include <cstdio>
 #include <cstdlib>
 #include <cstdint>
 #include <cstring>
 #include <random>
-
-static const int NUM_OBJ = 8;
 
 struct Obj {
     int id;
@@ -12,18 +11,33 @@ struct Obj {
     int* ptr;
 };
 
-Obj objects[NUM_OBJ];
+const int NUM_OBJ = 8;
+const int KB = 256;
+const int MB = KB << 10;
 
 size_t sizes[NUM_OBJ] = {
-    10,
-    100,
-    1000,
-    10000,
-    20000,
-    40000,
-    80000,
-    160000
+    MB,
+    MB,
+    MB,
+    MB,
+    MB,
+    MB,
+    MB,
+    MB
 };
+
+// size_t sizes[NUM_OBJ] = {
+//     KB,
+//     KB,
+//     KB,
+//     KB,
+//     KB,
+//     KB,
+//     KB,
+//     KB
+// };
+
+Obj objects[NUM_OBJ];
 size_t total_bytes = 0;
 
 // ----------------------------

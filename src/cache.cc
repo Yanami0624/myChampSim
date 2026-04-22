@@ -22,7 +22,20 @@
 #include "ooo_cpu.h"
 extern std::map<uint64_t, ObjectInfo*> live_table; // 当前活跃对象（地址 → object）
 extern std::unordered_map<uint64_t, ObjectInfo> history_table; // 所有对象（object_id → object）
+std::unordered_map<uint64_t, uint64_t> pa_to_va_map;
+
 extern ObjectInfo* find_object(uint64_t addr);
+ObjectInfo* find_object(uint64_t addr, bool is_pf) {
+  uint64_t pa_page = addr >> 12;
+  uint64_t pf_offset  = addr & 0xFFF;
+
+  // printf("find_object %lx\n", pa_page);
+  auto va_page = pa_to_va_map.find(pa_page);
+  if(va_page == pa_to_va_map.end()) return nullptr;
+  auto va = (va_page->second << 12) | pf_offset;
+  return find_object(va);
+}
+
 
 
 inline CacheLevel get_cache_level(const std::string& name)
@@ -299,8 +312,6 @@ bool CACHE::handle_fill(const mshr_type& fill_mshr)
 
 bool CACHE::try_hit(const tag_lookup_type& handle_pkt)
 {
-  // TODO 这里的addr可能不是 object 地址而是 block 地址
-  // if(live_table.find(addr) != live_table.end()) printf("hit\n");
 
   cpu = handle_pkt.cpu;
 
@@ -329,20 +340,20 @@ bool CACHE::try_hit(const tag_lookup_type& handle_pkt)
                                 // static long long cnt = 0;
                                 // if(cnt++ % 100000 == 0) std::cout << NAME << std::endl;
   if (hit) {
-    uint64_t addr = handle_pkt.v_address.to<uint64_t>();
+    uint64_t addr = handle_pkt.address.to<uint64_t>();
     auto* obj = find_object(addr);
     if (obj) {
       match(NAME, obj, handle_pkt.type, true);
     }
-    // if (handle_pkt.type == access_type::PREFETCH) {
-    // if (!obj) {
-    //     std::cout
-    //         << "PF no object: "
-    //         << std::hex
-    //         << handle_pkt.address.to<uint64_t>()
-    //         << "\n";
-    //   }
-    // }
+    if (handle_pkt.type == access_type::PREFETCH) {
+      // if (!obj) {
+      //   std::cout
+      //       << "PF no object: "
+      //       << std::hex
+      //       << handle_pkt.address.to<uint64_t>()
+      //       << "\n";
+      // }
+    }
 
     sim_stats.hits.increment(std::pair{handle_pkt.type, handle_pkt.cpu});
 
@@ -663,6 +674,15 @@ bool CACHE::prefetch_line(champsim::address pf_addr, bool fill_this_level, uint3
     return false;
   }
 
+  uint64_t addr = pf_addr.to<uint64_t>();
+  // printf("%lx\n", pf_addr);
+  auto* obj = find_object(addr, true);
+  
+  if (obj) {
+      // printf("%lx, %lx\n", pf_addr, obj->base_addr);
+      match(NAME, obj, access_type::PREFETCH, true);
+    }
+
   request_type pf_packet;
   pf_packet.type = access_type::PREFETCH;
   pf_packet.pf_metadata = prefetch_metadata;
@@ -723,6 +743,17 @@ void CACHE::finish_translation(const response_type& packet)
     [[maybe_unused]] auto old_address = entry.address;
     entry.address = champsim::address{champsim::splice(p_page, champsim::page_offset{entry.v_address})}; // translated address
     entry.is_translated = true;                                                                          // This entry is now translated
+    
+    uint64_t pa = entry.address.template to<uint64_t>();
+    uint64_t va = entry.v_address.template to<uint64_t>();
+
+    uint64_t pa_page = pa >> 12; // 4KB 页
+    uint64_t va_page = va >> 12;
+
+    if (find_object(va) != nullptr) {
+        pa_to_va_map[pa_page] = va_page;
+        // printf("mapping %lx -> %lx\n", pa_page, va_page);
+    }
 
     if constexpr (champsim::debug_print) {
       fmt::print("[{}_TRANSLATE] finish_translation old: {} paddr: {} vaddr: {} type: {} cycle: {}\n", this->NAME, old_address, entry.address, entry.v_address,

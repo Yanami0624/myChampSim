@@ -17,7 +17,7 @@ TRACE_FILE="$CHAMPSIM_DIR/traces/$(basename $CPP_FILE .cpp).champsim"
 CHAMPSIM_BIN="$CHAMPSIM_DIR/bin/champsim"
 
 # 参数
-SKIP_INS=0
+SKIP_INS=10
 TRACE_NUM_INS=1000000000
 
 # ================= 自动准备 =================

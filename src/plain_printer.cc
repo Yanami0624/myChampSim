@@ -31,6 +31,7 @@
 extern std::map<uint64_t, ObjectInfo*> live_table; // 当前活跃对象（地址 → object）
 extern std::unordered_map<uint64_t, ObjectInfo> history_table; // 所有对象（object_id → object）
 extern std::unordered_map<uint64_t, uint64_t> instr_to_addr; // (指令ip → addr)
+extern std::unordered_map<uint64_t, uint64_t> pa_to_va_map;
 extern uint64_t peak_live_bytes;
 extern ObjectInfo* find_object(uint64_t addr);
 
@@ -156,13 +157,11 @@ std::vector<std::string> champsim::plain_printer::format(DRAM_CHANNEL::stats_typ
 }
 
 static inline uint64_t compute_lifetime(
-    const ObjectInfo& obj,
-    uint64_t current_time)
+    const ObjectInfo& obj)
 {
     if (obj.alive) {
         return 0;
     }
-
     auto diff = obj.free_time - obj.alloc_time;
     return static_cast<uint64_t>(diff.count());
 }
@@ -176,16 +175,21 @@ void print_object_stats(std::vector<std::string>& lines,const std::unordered_map
     std::vector<const ObjectInfo*> objs;
     for(auto& [id,obj]:history_table)if(!obj.alive)objs.push_back(&obj);
     std::sort(objs.begin(),objs.end(),[](auto*a,auto*b){return a->size>b->size;});
+    unsigned long long total_acc = 0;
+    for(const auto*obj:objs) 
+      for(int t=0;t<NUM_ACCESS_TYPE;t++)
+        total_acc += obj->access[L1D][t] + obj->access[L2C][t];
     for(const auto*obj:objs){
         uint64_t l1_access=0,l1_miss=0,l2_access=0,l2_miss=0;
         for(int t=0;t<NUM_ACCESS_TYPE;t++){l1_access+=obj->access[L1D][t];l1_miss+=obj->miss[L1D][t];l2_access+=obj->access[L2C][t];l2_miss+=obj->miss[L2C][t];}
         auto T=[&](CacheLevel l){uint64_t s=0;for(int t=0;t<NUM_ACCESS_TYPE;t++)s+=obj->access[l][t];return s;};
         auto L=[&](CacheLevel l){return obj->access[l][LOAD];};
-        auto P=[&](CacheLevel l){return obj->access[l][PREFETCH];};
+        auto P=[&](CacheLevel l){return obj->access[l][PREFETCH];}; // must set "virtual_prefetch" to true in champsim_config.json
         auto W=[&](CacheLevel l){return obj->access[l][WRITE];};
         auto R=[&](CacheLevel l){return obj->access[l][TRANSLATION];};
-        uint64_t access=l1_access,lifetime=(obj->free_time-obj->alloc_time).count(),miss=l1_miss+l2_miss;
+        uint64_t access=l1_access + l2_access,lifetime=compute_lifetime(*obj),miss=l1_miss+l2_miss;
         double acc_ratio=0,mpki=0,lat=0,l1mr=0,l2mr=0,peak=0;
+        acc_ratio = 100.0 * (l1_access + l2_access) / total_acc;
         if(total_instr)mpki=1000.0*miss/total_instr;
         if(l1_access)l1mr=(double)l1_miss/l1_access;
         if(l2_access)l2mr=(double)l2_miss/l2_access;
@@ -263,6 +267,8 @@ std::vector<std::string> champsim::plain_printer::format(champsim::phase_stats& 
     clock(),
     total_instr
   );
+
+  // printf("pa2va map size: %d\n", pa_to_va_map.size());
 
   return lines;
 }
