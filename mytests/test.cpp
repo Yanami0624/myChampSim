@@ -16,12 +16,12 @@ const int KB = 256;
 const int MB = KB << 10;
 
 size_t sizes[NUM_OBJ] = {
-    MB,
-    MB,
-    MB,
-    MB,
-    MB,
-    MB,
+    KB << 3,
+    KB << 4,
+    KB << 5,
+    KB << 6,
+    KB << 7,
+    KB << 8,
     MB,
     MB
 };

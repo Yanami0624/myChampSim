@@ -675,11 +675,17 @@ bool CACHE::prefetch_line(champsim::address pf_addr, bool fill_this_level, uint3
   }
 
   uint64_t addr = pf_addr.to<uint64_t>();
-  // printf("%lx\n", pf_addr);
-  auto* obj = find_object(addr, true);
+  // hint: I open "virtual_prefetch" in champsim_config.json currently,
+  // it could change the behavior of prefetcher.
+  // if you want to test your original physical-address-prefetcher, do those below
+  // 1. replace this function below with find_object(addr, true)
+  // 2. restore pa_to_va_map maintainance in finish_translation()
+  // 3. 
+
+  // auto* obj = find_object(addr, true);
+  auto* obj = find_object(addr);
   
   if (obj) {
-      // printf("%lx, %lx\n", pf_addr, obj->base_addr);
       match(NAME, obj, access_type::PREFETCH, true);
     }
 
@@ -751,7 +757,7 @@ void CACHE::finish_translation(const response_type& packet)
     uint64_t va_page = va >> 12;
 
     if (find_object(va) != nullptr) {
-        pa_to_va_map[pa_page] = va_page;
+        // pa_to_va_map[pa_page] = va_page;
         // printf("mapping %lx -> %lx\n", pa_page, va_page);
     }
 

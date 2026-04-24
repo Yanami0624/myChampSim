@@ -50,7 +50,7 @@
     "max_tag_check": 2,
     "max_fill": 2,
     "prefetch_as_load": false,
-    "virtual_prefetch": false,
+    "virtual_prefetch": true,
     "prefetch_activate": "LOAD,PREFETCH",
     "prefetcher": "no"
   },
@@ -66,7 +66,7 @@
     "max_tag_check": 2,
     "max_fill": 2,
     "prefetch_as_load": false,
-    "virtual_prefetch": false,
+    "virtual_prefetch": true,
     "prefetch_activate": "LOAD,PREFETCH",
     "prefetcher": "spp_dev"
   },
@@ -82,7 +82,7 @@
     "max_tag_check": 1,
     "max_fill": 1,
     "prefetch_as_load": false,
-    "virtual_prefetch": false,
+    "virtual_prefetch": true,
     "prefetch_activate": "LOAD,PREFETCH",
     "prefetcher": "spp_dev"
   },
@@ -153,7 +153,7 @@
     "max_tag_check": 1,
     "max_fill": 1,
     "prefetch_as_load": false,
-    "virtual_prefetch": false,
+    "virtual_prefetch": true,
     "prefetch_activate": "LOAD,PREFETCH",
     "prefetcher": "no",
     "replacement": "lru"
