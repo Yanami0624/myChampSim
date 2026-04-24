@@ -33,4 +33,4 @@ compile_commands.json
 
 traces/
 output.txt
-csvs/
+result/

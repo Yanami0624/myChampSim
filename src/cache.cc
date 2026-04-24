@@ -251,6 +251,12 @@ bool CACHE::handle_fill(const mshr_type& fill_mshr)
     if (!success) {
       return false;
     }
+
+    uint64_t addr = way->v_address.to<uint64_t>();
+    auto* obj = find_object(addr);
+    if (obj) {
+        match(NAME, obj, access_type::WRITE, true);
+    }
   }
 
   champsim::address evicting_address{};
@@ -273,13 +279,6 @@ bool CACHE::handle_fill(const mshr_type& fill_mshr)
     }
 
     *way = fill_block(fill_mshr, metadata_thru);
-
-    uint64_t addr = way->v_address.to<uint64_t>();
-    auto* obj = find_object(addr);
-
-    if (obj) {
-      match(NAME, obj, access_type::WRITE, true);
-    }
   }
 
   // COLLECT STATS
@@ -340,7 +339,7 @@ bool CACHE::try_hit(const tag_lookup_type& handle_pkt)
                                 // static long long cnt = 0;
                                 // if(cnt++ % 100000 == 0) std::cout << NAME << std::endl;
   if (hit) {
-    uint64_t addr = handle_pkt.address.to<uint64_t>();
+    uint64_t addr = handle_pkt.v_address.to<uint64_t>();
     auto* obj = find_object(addr);
     if (obj) {
       match(NAME, obj, handle_pkt.type, true);
@@ -369,12 +368,6 @@ bool CACHE::try_hit(const tag_lookup_type& handle_pkt)
       ++sim_stats.pf_useful;
       way->prefetch = false;
     }
-  } else {
-    // uint64_t addr = handle_pkt.v_address.to<uint64_t>();
-    // auto* obj = find_object(addr);
-    // if (obj) {
-    //   match(NAME, obj, false);
-    // }
   }
 
   return hit;
@@ -388,6 +381,13 @@ auto CACHE::mshr_and_forward_packet(const tag_lookup_type& handle_pkt) -> std::p
 
   fwd_pkt.asid[0] = handle_pkt.asid[0];
   fwd_pkt.asid[1] = handle_pkt.asid[1];
+
+  uint64_t vaddr = handle_pkt.v_address.to<uint64_t>();
+  ObjectInfo* obj = find_object(vaddr);
+  if (obj) {
+    // match(NAME, obj, handle_pkt.type, false);
+  }
+
   fwd_pkt.type = (handle_pkt.type == access_type::WRITE) ? access_type::RFO : handle_pkt.type;
   fwd_pkt.pf_metadata = handle_pkt.pf_metadata;
   fwd_pkt.cpu = handle_pkt.cpu;
@@ -684,9 +684,8 @@ bool CACHE::prefetch_line(champsim::address pf_addr, bool fill_this_level, uint3
 
   // auto* obj = find_object(addr, true);
   auto* obj = find_object(addr);
-  
   if (obj) {
-      match(NAME, obj, access_type::PREFETCH, true);
+      // match(NAME, obj, access_type::PREFETCH, true);
     }
 
   request_type pf_packet;

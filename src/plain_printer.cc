@@ -166,38 +166,191 @@ static inline uint64_t compute_lifetime(
     return static_cast<uint64_t>(diff.count());
 }
 
-void print_object_stats(std::vector<std::string>& lines,const std::unordered_map<uint64_t,ObjectInfo>& history_table,uint64_t current_time,uint64_t total_instr){
+#include <fstream>
+#include <nlohmann/json.hpp>
+#include <filesystem>
+
+using json = nlohmann::json;
+namespace fs = std::filesystem;
+
+void print_object_stats(std::vector<std::string>& lines, const std::unordered_map<uint64_t, ObjectInfo>& history_table, uint64_t current_time, uint64_t total_instr) {
     lines.emplace_back("OBJECT STATISTICS (sorted by size)");
-    lines.emplace_back("--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------");
-    auto header=fmt::format("{:<8} {:<10} {:<10} {:<11} {:<8} {:<12} {:<8} {:<8} {:<8} {:<8} {:<8} {:<8} {:<8} {:<8} {:<8} {:<8} {:<8} {:<8} {:<8} {:<8} {:<8} {:<8} {:<8} {:<8} {:<8}","ID","SIZE","LIFE","ACCESS","ACC%","DPKB","L1_ACC","L1_MISS","L2_ACC","L2_MISS","MPKI","LAT","L1_MR%","L2_MR%","PEAK","L1D_T","L1D_L","L1D_P","L1D_W","L1D_TR","L2_T","L2_L","L2_P","L2_W","L2_TR");
+    lines.emplace_back("--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------");
+
+    // 精准固定宽度，全局对齐
+    auto header = fmt::format(
+        "{:<6} {:<10} {:<12} {:<10} {:<12} {:<10} {:<10} {:<9} {:<9} {:<9} "
+        "{:<11} {:<11} {:<9} "
+        "{:<11} {:<11} {:<9} "
+        "{:<11} {:<11} {:<9} "
+        "{:<11} {:<11} {:<9} "
+        "{:<11} {:<11} {:<9} "
+        "{:<11} {:<11} {:<9} "
+        "{:<11} {:<11} {:<9} "
+        "{:<11} {:<11} {:<9}",
+
+        "ID", "SIZE", "LIFE", "ACCESS", "DPKB", "MPKI", "LAT",
+        "L1_MR%", "L2_MR%", "PEAK",
+
+        "L1D_LD_ACC", "L1D_LD_MISS", "L1D_LD_MR%",
+        "L1D_RFO_ACC", "L1D_RFO_MISS", "L1D_RFO_MR%",
+        "L1D_PF_ACC",  "L1D_PF_MISS",  "L1D_PF_MR%",
+        "L1D_WR_ACC",  "L1D_WR_MISS",  "L1D_WR_MR%",
+
+        "L2C_LD_ACC",  "L2C_LD_MISS",  "L2C_LD_MR%",
+        "L2C_RFO_ACC", "L2C_RFO_MISS", "L2C_RFO_MR%",
+        "L2C_PF_ACC",  "L2C_PF_MISS",  "L2C_PF_MR%",
+        "L2C_WR_ACC",  "L2C_WR_MISS",  "L2C_WR_MR%"
+    );
     lines.push_back(header);
-    lines.emplace_back("--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------");
+    lines.emplace_back("--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------");
+
     std::vector<const ObjectInfo*> objs;
-    for(auto& [id,obj]:history_table)if(!obj.alive)objs.push_back(&obj);
-    std::sort(objs.begin(),objs.end(),[](auto*a,auto*b){return a->size>b->size;});
-    unsigned long long total_acc = 0;
-    for(const auto*obj:objs) 
-      for(int t=0;t<NUM_ACCESS_TYPE;t++)
-        total_acc += obj->access[L1D][t] + obj->access[L2C][t];
-    for(const auto*obj:objs){
-        uint64_t l1_access=0,l1_miss=0,l2_access=0,l2_miss=0;
-        for(int t=0;t<NUM_ACCESS_TYPE;t++){l1_access+=obj->access[L1D][t];l1_miss+=obj->miss[L1D][t];l2_access+=obj->access[L2C][t];l2_miss+=obj->miss[L2C][t];}
-        auto T=[&](CacheLevel l){uint64_t s=0;for(int t=0;t<NUM_ACCESS_TYPE;t++)s+=obj->access[l][t];return s;};
-        auto L=[&](CacheLevel l){return obj->access[l][LOAD];};
-        auto P=[&](CacheLevel l){return obj->access[l][PREFETCH];}; // must set "virtual_prefetch" to true in champsim_config.json
-        auto W=[&](CacheLevel l){return obj->access[l][WRITE];};
-        auto R=[&](CacheLevel l){return obj->access[l][TRANSLATION];};
-        uint64_t access=l1_access + l2_access,lifetime=compute_lifetime(*obj),miss=l1_miss+l2_miss;
-        double acc_ratio=0,mpki=0,lat=0,l1mr=0,l2mr=0,peak=0;
-        acc_ratio = 100.0 * (l1_access + l2_access) / total_acc;
-        if(total_instr)mpki=1000.0*miss/total_instr;
-        if(l1_access)l1mr=(double)l1_miss/l1_access;
-        if(l2_access)l2mr=(double)l2_miss/l2_access;
-        if(obj->latency_event_count)lat=(double)obj->total_miss_latency/obj->latency_event_count;
-        if(peak_live_bytes)peak=100.0*obj->size/peak_live_bytes;
-        auto row=fmt::format("{:<8x} {:<10} {:<10} {:<11} {:<7.2f}% {:<12.2f} {:<8} {:<8} {:<8} {:<8} {:<8.2f} {:<8.2f} {:<7.2f}% {:<7.2f}% {:<7.2f}% {:<8} {:<8} {:<8} {:<8} {:<8} {:<8} {:<8} {:<8} {:<8} {:<8}",obj->object_id,obj->size,lifetime,access,acc_ratio,obj->size?(double)access/(obj->size/1024.0):0.0,l1_access,l1_miss,l2_access,l2_miss,mpki,lat,l1mr*100.0,l2mr*100.0,peak,T(L1D),L(L1D),P(L1D),W(L1D),R(L1D),T(L2C),L(L2C),P(L2C),W(L2C),R(L2C));
-        lines.push_back(row);
+    for (auto& [id, obj] : history_table)
+        if (!obj.alive)
+            objs.push_back(&obj);
+
+    std::sort(objs.begin(), objs.end(), [](auto* a, auto* b) {
+        return a->size > b->size;
+    });
+
+    uint64_t total_acc = 0;
+    for (const auto* obj : objs) {
+        for (int t = 0; t < NUM_ACCESS_TYPE; t++) {
+            if (t == TRANSLATION) continue;
+            total_acc += obj->access[L1D][t] + obj->access[L2C][t];
+        }
     }
+
+    json json_data;
+    json metadata;
+    metadata["total_instructions"] = total_instr;
+    metadata["total_accesses"] = total_acc;
+    metadata["sorted_by"] = "object_size_desc";
+    json_data["metadata"] = metadata;
+    json objects_json = json::array();
+
+    auto mr = [](uint64_t a, uint64_t m) {
+        return (a > 0) ? 100.0 * m / a : 0.0;
+    };
+
+    for (const auto* obj : objs) {
+        uint64_t l1_access = 0, l1_miss = 0;
+        uint64_t l2_access = 0, l2_miss = 0;
+        for (int t = 0; t < NUM_ACCESS_TYPE; t++) {
+            if (t == TRANSLATION) continue;
+            l1_access += obj->access[L1D][t];
+            l1_miss += obj->miss[L1D][t];
+            l2_access += obj->access[L2C][t];
+            l2_miss += obj->miss[L2C][t];
+        }
+
+        uint64_t total_access = l1_access + l2_access;
+        uint64_t lifetime = compute_lifetime(*obj);
+        uint64_t total_miss = l1_miss + l2_miss;
+
+        double mpki = 0.0, avg_lat = 0.0;
+        double l1_mr = 0.0, l2_mr = 0.0, peak = 0.0;
+        if (total_instr > 0) mpki = 1000.0 * total_miss / total_instr;
+        if (l1_access > 0)  l1_mr = 100.0 * l1_miss / l1_access;
+        if (l2_access > 0)  l2_mr = 100.0 * l2_miss / l2_access;
+        if (obj->latency_event_count > 0) avg_lat = (double)obj->total_miss_latency / obj->latency_event_count;
+        if (peak_live_bytes > 0) peak = 100.0 * obj->size / peak_live_bytes;
+        double dpkb = obj->size ? (double)total_access / (obj->size / 1024.0) : 0.0;
+
+        // L1D
+        uint64_t l1d_ld_acc  = obj->access[L1D][LOAD];
+        uint64_t l1d_ld_miss = obj->miss[L1D][LOAD];
+        double   l1d_ld_mr   = mr(l1d_ld_acc, l1d_ld_miss);
+
+        uint64_t l1d_rfo_acc  = obj->access[L1D][RFO];
+        uint64_t l1d_rfo_miss = obj->miss[L1D][RFO];
+        double   l1d_rfo_mr   = mr(l1d_rfo_acc, l1d_rfo_miss);
+
+        uint64_t l1d_pf_acc  = obj->access[L1D][PREFETCH];
+        uint64_t l1d_pf_miss = obj->miss[L1D][PREFETCH];
+        double   l1d_pf_mr   = mr(l1d_pf_acc, l1d_pf_miss);
+
+        uint64_t l1d_wr_acc  = obj->access[L1D][WRITE];
+        uint64_t l1d_wr_miss = obj->miss[L1D][WRITE];
+        double   l1d_wr_mr   = mr(l1d_wr_acc, l1d_wr_miss);
+
+        // L2C
+        uint64_t l2c_ld_acc  = obj->access[L2C][LOAD];
+        uint64_t l2c_ld_miss = obj->miss[L2C][LOAD];
+        double   l2c_ld_mr   = mr(l2c_ld_acc, l2c_ld_miss);
+
+        uint64_t l2c_rfo_acc  = obj->access[L2C][RFO];
+        uint64_t l2c_rfo_miss = obj->miss[L2C][RFO];
+        double   l2c_rfo_mr   = mr(l2c_rfo_acc, l2c_rfo_miss);
+
+        uint64_t l2c_pf_acc  = obj->access[L2C][PREFETCH];
+        uint64_t l2c_pf_miss = obj->miss[L2C][PREFETCH];
+        double   l2c_pf_mr   = mr(l2c_pf_acc, l2c_pf_miss);
+
+        uint64_t l2c_wr_acc  = obj->access[L2C][WRITE];
+        uint64_t l2c_wr_miss = obj->miss[L2C][WRITE];
+        double   l2c_wr_mr   = mr(l2c_wr_acc, l2c_wr_miss);
+
+        // 数值行严格等宽对齐
+        auto row = fmt::format(
+            "{:<6x} {:<10} {:<12} {:<10} {:<12.2f} {:<10.2f} {:<10.2f} {:<8.2f}% {:<8.2f}% {:<8.2f}% "
+            "{:<11} {:<11} {:<8.2f} "
+            "{:<11} {:<11} {:<8.2f} "
+            "{:<11} {:<11} {:<8.2f} "
+            "{:<11} {:<11} {:<8.2f} "
+            "{:<11} {:<11} {:<8.2f} "
+            "{:<11} {:<11} {:<8.2f} "
+            "{:<11} {:<11} {:<8.2f} "
+            "{:<11} {:<11} {:<8.2f}",
+
+            obj->object_id, obj->size, lifetime, total_access, dpkb,
+            mpki, avg_lat, l1_mr, l2_mr, peak,
+
+            l1d_ld_acc, l1d_ld_miss, l1d_ld_mr,
+            l1d_rfo_acc, l1d_rfo_miss, l1d_rfo_mr,
+            l1d_pf_acc,  l1d_pf_miss,  l1d_pf_mr,
+            l1d_wr_acc,  l1d_wr_miss,  l1d_wr_mr,
+
+            l2c_ld_acc,  l2c_ld_miss,  l2c_ld_mr,
+            l2c_rfo_acc, l2c_rfo_miss, l2c_rfo_mr,
+            l2c_pf_acc,  l2c_pf_miss,  l2c_pf_mr,
+            l2c_wr_acc,  l2c_wr_miss,  l2c_wr_mr
+        );
+        lines.push_back(row);
+
+        // JSON 保留完整三维结构
+        json o;
+        o["object_id"] = fmt::format("{:x}", obj->object_id);
+        o["size"] = obj->size;
+        o["lifetime"] = lifetime;
+        o["total_access"] = total_access;
+        o["dpkb"] = dpkb;
+        o["mpki"] = mpki;
+        o["avg_miss_latency"] = avg_lat;
+        o["l1_miss_rate_pct"] = l1_mr;
+        o["l2_miss_rate_pct"] = l2_mr;
+        o["peak_memory_pct"] = peak;
+
+        o["L1D"]["LOAD"]      = {{"access", l1d_ld_acc}, {"miss", l1d_ld_miss}, {"miss_rate_pct", l1d_ld_mr}};
+        o["L1D"]["RFO"]       = {{"access", l1d_rfo_acc}, {"miss", l1d_rfo_miss}, {"miss_rate_pct", l1d_rfo_mr}};
+        o["L1D"]["PREFETCH"]  = {{"access", l1d_pf_acc}, {"miss", l1d_pf_miss}, {"miss_rate_pct", l1d_pf_mr}};
+        o["L1D"]["WRITE"]     = {{"access", l1d_wr_acc}, {"miss", l1d_wr_miss}, {"miss_rate_pct", l1d_wr_mr}};
+
+        o["L2C"]["LOAD"]      = {{"access", l2c_ld_acc}, {"miss", l2c_ld_miss}, {"miss_rate_pct", l2c_ld_mr}};
+        o["L2C"]["RFO"]       = {{"access", l2c_rfo_acc}, {"miss", l2c_rfo_miss}, {"miss_rate_pct", l2c_rfo_mr}};
+        o["L2C"]["PREFETCH"]  = {{"access", l2c_pf_acc}, {"miss", l2c_pf_miss}, {"miss_rate_pct", l2c_pf_mr}};
+        o["L2C"]["WRITE"]     = {{"access", l2c_wr_acc}, {"miss", l2c_wr_miss}, {"miss_rate_pct", l2c_wr_mr}};
+
+        objects_json.push_back(o);
+    }
+
+    json_data["objects"] = objects_json;
+    try {
+        if (!fs::exists("result")) fs::create_directory("result");
+        std::ofstream f("result/object_stats.json");
+        if (f) { f << json_data.dump(4); f.close(); }
+    } catch (...) {}
 }
 
 void champsim::plain_printer::print(champsim::phase_stats& stats)
