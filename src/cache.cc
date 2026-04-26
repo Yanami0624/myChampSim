@@ -663,7 +663,7 @@ bool CACHE::prefetch_line(champsim::address pf_addr, bool fill_this_level, uint3
   uint64_t addr = pf_addr.to<uint64_t>();
   // hint: I open "virtual_prefetch" in champsim_config.json currently,
   // it could change the behavior of prefetcher.
-  // if you want to test your original physical-address-prefetcher, do those below
+  // if you want to test your original physical-address-prefetcher, follow below steps
   // 1. replace this function below with find_object(addr, true)
   // 2. restore pa_to_va_map maintainance in finish_translation()
   // 3. 

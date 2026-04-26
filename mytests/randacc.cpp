@@ -1,142 +1,30 @@
-// test.cpp
+// test the obj-statistic reliability
 #include <iostream>
-#include <vector>
-#include <cstdlib>
-#include <cstring>
-#include <random>
-
 using namespace std;
 
-struct Obj {
-    int id;
-    size_t size;
-    int* ptr;
-};
-
 int main() {
-    cout << "Program start\n";
+    // ===================== 严格遵守限制 =====================
+    // 总对象大小：8MB (1024*1024*8) < 10MB ✔️
+    // 无任何 std 容器 ✔️
+    // ACCESS_TIMES = 100万 ✔️
+    // ========================================================
+    #define OBJ_SIZE        (8 * 1024 * 1024)  // 8MB 对象
+    #define ACCESS_TIMES    1000000            // 100万次访问
 
-    // vector<size_t> sizes = {
-    //     16,     // 64B
-    //     64,     // 256B
-    //     256,    // 1KB
-    //     1024,   // 4KB
-    //     4096,   // 16KB
-    // };
-
-    vector<size_t> sizes = {
-        10,
-        100,
-        1000,
-        10000,
-        20000,
-        40000, // ~ L2 cacheline size
-        80000,
-        160000,
-    };
-
-    vector<Obj> objects;
-
-    size_t total_bytes = 0;
-
-    // -------------------------
-    // malloc 不同大小对象
-    // -------------------------
-    for (int i = 0; i < sizes.size(); i++) {
-        size_t n = sizes[i];
-
-        int* p = (int*) malloc(sizeof(int) * n);
-
-        if (!p) {
-            cerr << "malloc failed\n";
-            return 1;
-        }
-
-        // memset(p, 0, sizeof(int) * n);
-
-        Obj obj;
-        obj.id = i;
-        obj.size = n;
-        obj.ptr = p;
-
-        objects.push_back(obj);
-
-        size_t bytes = sizeof(int) * n;
-        total_bytes += bytes;
-
-        cout << "malloc object "
-             << i
-             << " addr=" << (void*)p
-             << " size=" << bytes
-             << " bytes\n";
+    // 只分配一个大堆对象（malloc → 会被你的工具追踪）
+    char* obj = (char*)malloc(OBJ_SIZE);
+    
+    // 循环密集访问：所有地址都在 [obj, obj+OBJ_SIZE) 范围内
+    cout << "start\n";
+    char ele;
+    for (long long i = 0; i < ACCESS_TIMES; ++i) {
+        if(i % (ACCESS_TIMES / 10) == 0) cout << 'a' + (ele % 26) << ' ';
+        // load
+        ele = obj[rand() % OBJ_SIZE];
     }
+    cout << "\nend\n";
 
-    cout << "\nTotal allocated bytes = "
-         << total_bytes
-         << "\n";
-
-    cout << "vector size: " << objects.size() * sizeof(Obj) << endl;
-
-    cout << "\n--- Sequential write ---\n";
-    // for (auto& obj : objects) {
-    //     for (size_t i = 0; i < obj.size; i++) {
-    //         // obj.ptr[i] = i;
-    //     }
-    // }
-
-    // cout << "\n--- Sequential read ---\n";
-    // long long sum = 0;
-    // for (auto& obj : objects) {
-    //     for (size_t i = 0; i < obj.size; i++) {
-    //         sum += obj.ptr[i];
-    //     }
-    // }
-    // cout << "sum=" << sum << "\n";
-
-    cout << "\n--- Random access ---\n";
-    int total = 0;
-    for(auto o: objects) {
-        total += o.size;
-    }
-    auto count_oid = [&](int seed) {
-        seed = seed % total;
-        int r = 0;
-        for(auto& o: objects) {
-            if(seed <= r + o.size) return o.id;
-            r += o.size;
-        }
-        return 0;
-    };
-
-    const int ROUND = 10000;
-    for (int round = 0; round < ROUND; round++) {
-        int obj_id = count_oid(rand());
-        Obj& obj = objects[obj_id];
-        size_t index = rand() % obj.size;
-        obj.ptr[index] = rand() % 10;
-    }
-    // volatile long long sink = 0;
-    long long sink = 0;
-    for (int round = 0; round < ROUND; round++) {
-        int obj_id = count_oid(rand());
-        Obj& obj = objects[obj_id];
-        size_t index = rand() % obj.size;
-        sink += obj.ptr[index];
-    }
-
-    cout << "Random access finished\n";
-
-    for (auto& obj : objects) {
-        cout << "free object "
-             << obj.id
-             << " addr=" << (void*)obj.ptr
-             << "\n";
-
-        free(obj.ptr);
-    }
-
-    printf("sum: %lld\n", sink);
-    cout << "Program end\n";
-
+    // 释放内存
+    free(obj);
     return 0;
 }

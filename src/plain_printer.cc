@@ -424,8 +424,8 @@ std::vector<std::string> champsim::plain_printer::format(champsim::phase_stats& 
   );
 
   // hint: of all cache accesses, only a small fraction hit the object.
-  // printf("find_object() hit: %lld, miss: %lld\n", fo_hit, fo_miss);
-  // printf("object access of all cache access: %f\n", 1.0 * fo_hit/fo_miss);
+  printf("find_object() hit: %lld, miss: %lld\n", fo_hit, fo_miss);
+  printf("object access of all cache access: %f\n", 1.0 * fo_hit/(fo_hit + fo_miss));
 
   return lines;
 }
