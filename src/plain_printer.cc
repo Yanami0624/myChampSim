@@ -359,6 +359,8 @@ void champsim::plain_printer::print(champsim::phase_stats& stats)
   std::copy(std::begin(lines), std::end(lines), std::ostream_iterator<std::string>(stream, "\n"));
 }
 
+extern long long fo_miss;
+extern long long fo_hit;
 std::vector<std::string> champsim::plain_printer::format(champsim::phase_stats& stats)
 {
   std::vector<std::string> lines{};
@@ -421,7 +423,9 @@ std::vector<std::string> champsim::plain_printer::format(champsim::phase_stats& 
     total_instr
   );
 
-  // printf("pa2va map size: %d\n", pa_to_va_map.size());
+  // hint: of all cache accesses, only a small fraction hit the object.
+  // printf("find_object() hit: %lld, miss: %lld\n", fo_hit, fo_miss);
+  // printf("object access of all cache access: %f\n", 1.0 * fo_hit/fo_miss);
 
   return lines;
 }

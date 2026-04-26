@@ -201,11 +201,15 @@ void O3_CPU::handle_free_event(const ooo_model_instr& instr)
     current_live_bytes -= obj->size;
 }
 
+
+long long fo_miss = 0;
+long long fo_hit = 0;
 ObjectInfo* find_object(uint64_t addr)
 {
     auto it = live_table.upper_bound(addr);
     
     if (it == live_table.begin()) {
+      ++fo_miss;
         return nullptr;
     }
     
@@ -213,10 +217,11 @@ ObjectInfo* find_object(uint64_t addr)
     
     auto& [base, obj] = *it;
     if (addr >= base && addr < base + obj->size) {
-      // printf("%ld, %ld, %ld\n", base, addr, base + obj->size);
+      ++fo_hit;
         return obj;
     }
     
+    ++fo_miss; 
     return nullptr;
 }
 

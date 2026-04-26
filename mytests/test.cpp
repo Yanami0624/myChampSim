@@ -15,27 +15,27 @@ const int NUM_OBJ = 8;
 const int KB = 256;
 const int MB = KB << 10;
 
-// size_t sizes[NUM_OBJ] = {
-//     KB << 3,
-//     KB << 4,
-//     KB << 4,
-//     KB << 4,
-//     KB << 4,
-//     KB << 4,
-//     KB << 3,
-//     KB << 3
-// };
-
 size_t sizes[NUM_OBJ] = {
-    MB,
-    MB,
-    MB,
-    MB,
-    MB,
-    MB,
-    MB,
-    MB
+    KB << 3,
+    KB << 4,
+    KB << 4,
+    KB << 4,
+    KB << 4,
+    KB << 4,
+    KB << 3,
+    KB << 3
 };
+
+// size_t sizes[NUM_OBJ] = {
+//     MB,
+//     MB,
+//     MB,
+//     MB,
+//     MB,
+//     MB,
+//     MB,
+//     MB
+// };
 
 Obj objects[NUM_OBJ];
 size_t total_bytes = 0;

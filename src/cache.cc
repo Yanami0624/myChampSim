@@ -36,13 +36,8 @@ ObjectInfo* find_object(uint64_t addr, bool is_pf) {
   return find_object(va);
 }
 
-
-
 inline CacheLevel get_cache_level(const std::string& name)
 {
-    if (name.find("L1I") != std::string::npos)
-        return L1I;
-
     if (name.find("L1D") != std::string::npos)
         return L1D;
 
@@ -255,7 +250,7 @@ bool CACHE::handle_fill(const mshr_type& fill_mshr)
     uint64_t addr = way->v_address.to<uint64_t>();
     auto* obj = find_object(addr);
     if (obj) {
-        match(NAME, obj, access_type::WRITE, true);
+        match(NAME, obj, writeback_packet.type, true);
     }
   }
 
@@ -343,15 +338,6 @@ bool CACHE::try_hit(const tag_lookup_type& handle_pkt)
     auto* obj = find_object(addr);
     if (obj) {
       match(NAME, obj, handle_pkt.type, true);
-    }
-    if (handle_pkt.type == access_type::PREFETCH) {
-      // if (!obj) {
-      //   std::cout
-      //       << "PF no object: "
-      //       << std::hex
-      //       << handle_pkt.address.to<uint64_t>()
-      //       << "\n";
-      // }
     }
 
     sim_stats.hits.increment(std::pair{handle_pkt.type, handle_pkt.cpu});
