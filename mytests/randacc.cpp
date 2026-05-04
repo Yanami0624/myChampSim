@@ -9,7 +9,7 @@ int main() {
     // ACCESS_TIMES = 100万 ✔️
     // ========================================================
     #define OBJ_SIZE        (8 * 1024 * 1024)  // 8MB 对象
-    #define ACCESS_TIMES    1000000            // 100万次访问
+    #define ACCESS_TIMES    100000            // 100万次访问
 
     // 只分配一个大堆对象（malloc → 会被你的工具追踪）
     char* obj = (char*)malloc(OBJ_SIZE);
@@ -21,6 +21,7 @@ int main() {
         if(i % (ACCESS_TIMES / 10) == 0) cout << 'a' + (ele % 26) << ' ';
         // load
         ele = obj[rand() % OBJ_SIZE];
+        obj[rand() % OBJ_SIZE] = ele;
     }
     cout << "\nend\n";
 

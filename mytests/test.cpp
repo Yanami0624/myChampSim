@@ -1,30 +1,131 @@
+// test.cpp
+#include <cstdio>
+#include <cstdlib>
+#include <cstdint>
+#include <cstring>
+#include <random>
 
-#include <iostream>
-using namespace std;
+struct Obj {
+    int id;
+    size_t size;
+    int* ptr;
+};
+
+const int NUM_OBJ = 8;
+const int KB = 256;
+const int MB = KB << 10;
+
+size_t sizes[NUM_OBJ] = {
+    KB << 3,
+    KB << 4,
+    KB << 4,
+    KB << 4,
+    KB << 4,
+    KB << 4,
+    KB << 3,
+    MB << 2
+};
+
+Obj objects[NUM_OBJ];
+size_t total_bytes = 0;
+
+// ----------------------------
+// 线性 mapping（避免 vector scan）
+// ----------------------------
+int get_obj_id(size_t x) {
+    x = x % total_bytes;
+    size_t acc = 0;
+    for (int i = 0; i < NUM_OBJ; i++) {
+        if (x < acc + sizes[i]) return i;
+        acc += sizes[i];
+    }
+    return NUM_OBJ - 1;
+}
 
 int main() {
-    // ===================== 严格遵守限制 =====================
-    // 总对象大小：8MB (1024*1024*8) < 10MB ✔️
-    // 无任何 std 容器 ✔️
-    // ACCESS_TIMES = 100万 ✔️
-    // ========================================================
-    #define OBJ_SIZE        (8 * 1024 * 1024)  // 8MB 对象
-    #define ACCESS_TIMES    1000000            // 100万次访问
+    printf("Program start\n");
 
-    // 只分配一个大堆对象（malloc → 会被你的工具追踪）
-    char* obj = (char*)malloc(OBJ_SIZE);
-    
-    // 循环密集访问：所有地址都在 [obj, obj+OBJ_SIZE) 范围内
-    cout << "start\n";
-    char ele;
-    for (long long i = 0; i < ACCESS_TIMES; ++i) {
-        if(i % (ACCESS_TIMES / 10) == 0) cout << 'a' + (ele % 26) << ' ';
-        // load
-        ele = obj[rand() % OBJ_SIZE];
+    // ----------------------------
+    // malloc objects（纯净）
+    // ----------------------------
+    for (int i = 0; i < NUM_OBJ; i++) {
+        objects[i].id = i;
+        objects[i].size = sizes[i];
+        objects[i].ptr = (int*)malloc(sizeof(int) * sizes[i]);
+
+        if (!objects[i].ptr) return 1;
+
+        total_bytes += sizeof(int) * sizes[i];
+
+        printf("malloc object %d addr=%p size=%zu bytes\n",
+               i, objects[i].ptr, sizeof(int) * sizes[i]);
     }
-    cout << "\nend\n";
 
-    // 释放内存
-    free(obj);
+    printf("\nTotal bytes = %zu\n", total_bytes);
+
+    // ----------------------------
+    // deterministic RNG（避免 rand noise）
+    // ----------------------------
+    std::mt19937 rng(12345);
+    std::uniform_int_distribution<int> dist(0, 100000000);
+
+    const int ROUND = 10000;
+
+    // printf("\n--- write phase ---\n");
+    // for (int i = 0; i < ROUND; i++) {
+    //     int x = dist(rng) % total_bytes;
+    //     int id = get_obj_id(x);
+
+    //     Obj &o = objects[id];
+    //     size_t idx = dist(rng) % o.size;
+
+    //     o.ptr[idx] = x;
+    // }
+
+
+    printf("\n--- WRITE PHASE (dirty cache lines) ---\n");
+
+    // 🔥 关键：让写发生“局部重复”
+    for (int i = 0; i < ROUND; i++) {
+        uint32_t x = dist(rng);
+        int id = get_obj_id(x);
+
+        Obj &o = objects[id];
+
+        // 🔥 核心改动：限制在 cache line 内反复写
+        size_t base = (x % (o.size / 16)) * 16;  // 16-int block
+
+        for (int k = 0; k < 16; k++) {
+            o.ptr[base + k] = x + k;
+        }
+    }
+
+    printf("\n--- READ+WRITE MIX PHASE ---\n");
+
+    printf("\n--- read phase ---\n");
+    long long sink = 0;
+
+    for (int i = 0; i < ROUND; i++) {
+        int x = dist(rng) % total_bytes;
+        int id = get_obj_id(x);
+
+        Obj &o = objects[id];
+        size_t idx = dist(rng) % o.size;
+
+        sink += o.ptr[idx];
+    }
+
+    printf("sink=%lld\n", sink);
+
+    // ----------------------------
+    // free
+    // ----------------------------
+    for (int i = 0; i < NUM_OBJ; i++) {
+        printf("free object %d addr=%p\n",
+               i, objects[i].ptr);
+        free(objects[i].ptr);
+    }
+
+    printf("Program end\n");
     return 0;
 }
