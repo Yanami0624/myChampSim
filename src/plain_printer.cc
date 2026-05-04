@@ -172,21 +172,22 @@ static inline uint64_t compute_lifetime(
 
 using json = nlohmann::json;
 namespace fs = std::filesystem;
+
 void print_object_stats(std::vector<std::string>& lines, const std::unordered_map<uint64_t, ObjectInfo>& history_table, uint64_t current_time, uint64_t total_instr) {
     lines.emplace_back("OBJECT STATISTICS (sorted by size)");
-    lines.emplace_back("--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------");
+    lines.emplace_back("------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------");
 
-    // 精准固定宽度，全局对齐 —— 在 ACCESS 后增加 acc_rate
+    // 统一更大的列宽，全局对齐
     auto header = fmt::format(
-        "{:<6} {:<10} {:<12} {:<10} {:<12} {:<12} {:<10} {:<10} {:<9} {:<9} {:<9} "
-        "{:<11} {:<11} {:<9} "
-        "{:<11} {:<11} {:<9} "
-        "{:<11} {:<11} {:<9} "
-        "{:<11} {:<11} {:<9} "
-        "{:<11} {:<11} {:<9} "
-        "{:<11} {:<11} {:<9} "
-        "{:<11} {:<11} {:<9} "
-        "{:<11} {:<11} {:<9}",
+        "{:<8} {:<12} {:<14} {:<12} {:<14} {:<14} {:<12} {:<12} {:<10} {:<10} {:<10} "
+        "{:<13} {:<13} {:<11} "
+        "{:<13} {:<13} {:<11} "
+        "{:<13} {:<13} {:<11} "
+        "{:<13} {:<13} {:<11} "
+        "{:<13} {:<13} {:<11} "
+        "{:<13} {:<13} {:<11} "
+        "{:<13} {:<13} {:<11} "
+        "{:<13} {:<13} {:<11}",
 
         "ID", "SIZE", "LIFE", "ACCESS", "ACC_RATE(%)", "DPKB", "MPKI", "LAT",
         "L1_MR%", "L2_MR%", "PEAK",
@@ -202,7 +203,7 @@ void print_object_stats(std::vector<std::string>& lines, const std::unordered_ma
         "L2C_WR_ACC",  "L2C_WR_MISS",  "L2C_WR_MR%"
     );
     lines.push_back(header);
-    lines.emplace_back("--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------");
+    lines.emplace_back("------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------");
 
     std::vector<const ObjectInfo*> objs;
     for (auto& [id, obj] : history_table)
@@ -248,7 +249,6 @@ void print_object_stats(std::vector<std::string>& lines, const std::unordered_ma
         uint64_t lifetime = compute_lifetime(*obj);
         uint64_t total_miss = l1_miss + l2_miss;
 
-        // 计算 acc_rate：当前对象访问占总访问的百分比
         double acc_rate = 0.0;
         if (total_acc > 0) {
             acc_rate = 100.0 * total_access / total_acc;
@@ -297,17 +297,17 @@ void print_object_stats(std::vector<std::string>& lines, const std::unordered_ma
         uint64_t l2c_wr_miss = obj->miss[L2C][WRITE];
         double   l2c_wr_mr   = mr(l2c_wr_acc, l2c_wr_miss);
 
-        // 数值行严格等宽对齐 —— 插入 acc_rate 列
+        // 数据行格式与表头 100% 匹配，移除错误的 % 符号
         auto row = fmt::format(
-            "{:<6x} {:<10} {:<12} {:<10} {:<12.2f}% {:<12.2f} {:<10.2f} {:<10.2f} {:<8.2f}% {:<8.2f}% {:<8.2f}% "
-            "{:<11} {:<11} {:<8.2f} "
-            "{:<11} {:<11} {:<8.2f} "
-            "{:<11} {:<11} {:<8.2f} "
-            "{:<11} {:<11} {:<8.2f} "
-            "{:<11} {:<11} {:<8.2f} "
-            "{:<11} {:<11} {:<8.2f} "
-            "{:<11} {:<11} {:<8.2f} "
-            "{:<11} {:<11} {:<8.2f}",
+            "{:<8x} {:<12} {:<14} {:<12} {:<14.2f} {:<14.2f} {:<12.2f} {:<12.2f} {:<10.2f} {:<10.2f} {:<10.2f} "
+            "{:<13} {:<13} {:<11.2f} "
+            "{:<13} {:<13} {:<11.2f} "
+            "{:<13} {:<13} {:<11.2f} "
+            "{:<13} {:<13} {:<11.2f} "
+            "{:<13} {:<13} {:<11.2f} "
+            "{:<13} {:<13} {:<11.2f} "
+            "{:<13} {:<13} {:<11.2f} "
+            "{:<13} {:<13} {:<11.2f}",
 
             obj->object_id, obj->size, lifetime, total_access, acc_rate, dpkb,
             mpki, avg_lat, l1_mr, l2_mr, peak,
@@ -324,13 +324,12 @@ void print_object_stats(std::vector<std::string>& lines, const std::unordered_ma
         );
         lines.push_back(row);
 
-        // JSON 保留完整三维结构 —— 增加 acc_rate 字段
         json o;
         o["object_id"] = fmt::format("{:x}", obj->object_id);
         o["size"] = obj->size;
         o["lifetime"] = lifetime;
         o["total_access"] = total_access;
-        o["acc_rate_pct"] = acc_rate;  // 新增
+        o["acc_rate_pct"] = acc_rate;
         o["dpkb"] = dpkb;
         o["mpki"] = mpki;
         o["avg_miss_latency"] = avg_lat;
@@ -358,6 +357,7 @@ void print_object_stats(std::vector<std::string>& lines, const std::unordered_ma
         if (f) { f << json_data.dump(4); f.close(); }
     } catch (...) {}
 }
+
 void champsim::plain_printer::print(champsim::phase_stats& stats)
 {
   auto lines = format(stats);
